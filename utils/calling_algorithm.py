@@ -181,13 +181,13 @@ class Derivitive(BaseEstimator,TransformerMixin):
 
 
 class FindPeak(BaseEstimator,TransformerMixin):
-    def __init__(self,heightlimit=0.9,widthlimit=0.05):
+    def __init__(self, peak_threshold = 12.1,heightlimit=0.9,widthlimit=0.05):
         self.heightlimit = heightlimit
         self.widthlimit = widthlimit
-        
+        self.peak_threshold = peak_threshold    
+    
     def fit(self,X,y=None):
         return self 
-    
     def transformer(self,X):
         
         t,gradient,pc = X
@@ -197,24 +197,34 @@ class FindPeak(BaseEstimator,TransformerMixin):
         
         peak_pos,left_ips,peak_prominence,peak_width = (t[-1],t[-1],0,0)
         sdAtRightIps,sdAt3min,sdAt5min,sdAt10min,sdAt15min,sdAtEnd = (0,0,0,0,0,0)
-        if len(peaks) != 0:            
+                   
         # most prominent peak in props 
+        peak_id = 0 #default peak_id is set as 0
+        if len(peaks) != 0:
             tspan = t[-1]-t[0]
-            normalizer =  tspan / len(gradient) 
-            maxpeak_index = props['prominences'].argmax()
-            peak_pos = peaks[maxpeak_index] * normalizer + t[0]
-            peak_prominence = props['prominences'][maxpeak_index] 
-            peak_width = props['widths'][maxpeak_index] * normalizer 
-            left_ips = props['left_ips'][maxpeak_index] * normalizer  + t[0]
+            normalizer =  tspan / len(gradient)
+            peak_poses = [peak * normalizer + t[0] for peak in peaks]
 
+            if ( len(peaks) > 1 ) and ( peak_poses[0] < self.peak_threshold):
+                #if there are more than one 1st-derivative peak and the first peak appears earlier than the peak threshold
+                #then the second peak is considered as the real drop
+                #assumptions: (1) there are only two peaks, and (2) there is always one real drop in amplified case`
+                peak_id = 1
+
+            peak_pos = peak_poses[peak_id] * normalizer + t[0]
+            peak_index = props['prominences'][peak_id]
+            peak_prominence = props['prominences'][peak_id]
+            peak_width = props['widths'][peak_id] * normalizer
+            left_ips = (props['left_ips'][peak_id] + 1) * normalizer + t[0]
+            
             pcMaxIdx = len(pc) - 1
 
             # siganl at left_ips:
-            startPosition = int(props['left_ips'][maxpeak_index])
+            startPosition = int(props['left_ips'][peak_id])
             sStart = pc[startPosition]
             # find signal drop at different positions:
             # sigal drop at peak_width 
-            sdAtRightIps = sStart - pc[min(int(props['right_ips'][maxpeak_index]), pcMaxIdx)]
+            sdAtRightIps = sStart - pc[min(int(props['right_ips'][peak_id]), pcMaxIdx)]
             # signal drop at 3 min later
             sdAt3min = sStart - pc[min(startPosition + int(3 / normalizer), pcMaxIdx)]
             # signal drop at 5 min later
@@ -225,11 +235,8 @@ class FindPeak(BaseEstimator,TransformerMixin):
             sdAt15min = sStart - pc[min(startPosition + int(15 / normalizer), pcMaxIdx)]
             # signal drop at end       
             sdAtEnd = sStart - pc[-1]            
-            
-            # calculate threshold Ct
-            
         return [left_ips,peak_prominence*100,peak_width,sdAtRightIps,sdAt3min,sdAt5min,sdAt10min,sdAt15min,sdAtEnd,t,gradient,pc]
-        
+
     def transform(self,X,y=None):        
         # return np.apply_along_axis(self.transformer,1,X,)
         return np.array([self.transformer(i) for i in X],dtype='object')
