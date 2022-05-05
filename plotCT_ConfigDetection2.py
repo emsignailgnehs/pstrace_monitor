@@ -28,6 +28,11 @@ import pandas as pd
 
 - For heterogeneous channel sensors, the sorting algorithm can automatically
   separate C1 and C4
+
+2022/03/16 Modification:
+- Found that the MacOS input path in terminal would show blank " " as "\\"
+  which confuses the program
+    Add a function to parse the filename before proceeding
 """
 
 ################################################################################
@@ -137,7 +142,15 @@ if __name__ == '__main__':
 
     picklefile = input('Enter picke file:\n').strip(' "')
 
-print(f'File you entered is: {picklefile}')
+filename = picklefile.split("\\")[-1]
+if len(filename.split("//")) > 1:
+    filename = " ".join(filename.split("//"))
+    print('1111')
+    picklefile = "\\".join(picklefile.split("\\")[:-2] + [filename])
+    print('2222')
+
+print(f'File you entered is: {filename}')
+print(picklefile)
 print('reading data...')
 dataSource = ViewerDataSource()
 pickleFiles = [picklefile]
