@@ -17,7 +17,7 @@ def sort_datasets(datasets):
     #                    |  |      |     |
     #                  cat type   id    ch
     def sorter_idnum(x):
-        return int(x['name'].split('-')[1])
+        return x['name'].split('-')[1]
     def sorter_type(x):
         return x['name'].split('-')[0][1:]
     def sorter_cat(x):
@@ -98,10 +98,10 @@ for i, id in enumerate(sorted(idlist)):
                 dat2plot = rearr_datasets[plot_query]['data']
                 title = f'{cattype}-{id}'
                 pc = [fit['pc'] for fit in dat2plot['fit']]
-                time = np.linspace(0, 30-1/3, 90)
+                time = np.linspace(0, 30-1/3, 90)[:len(pc)]
                 ax_graph.plot(time, pc, linewidth = 2, color = clr, label = ch)
             except KeyError:
-                title = 'No Data'
+                pass
         try:
             calling, summary = exp_summary(parse_desc(rearr_datasets[plot_query]['desc']))
             if calling == 'Positive':
@@ -120,8 +120,12 @@ for i, id in enumerate(sorted(idlist)):
             ax_summary.set_axis_off()
             ax_summary.text(0.05,0.5, summary, fontweight = 'bold')
         except KeyError:
+            title = f'{cattype}-{id} (Incomplete/No Data)'
+            ax_graph.set_title(title, color = 'gray')
+            ax_graph.set_xlabel('time (min)')
+            ax_graph.set_ylabel('Current ($\mu$A)')
             pass
 plt.tight_layout()
 
-savepath = picklefile.replace('.picklez', '') 
+savepath = picklefile.replace('.picklez', '')
 fig.savefig(f'{savepath}_summary.svg')
