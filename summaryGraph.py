@@ -92,16 +92,17 @@ for i, id in enumerate(sorted(idlist)):
     for j, cattype in enumerate(cattypes):
         # plot individual channels
         ax_graph = fig.add_subplot(gs[row_pc_vs_t, j])
-        for ch, clr in zip(['C1', 'C4'],['blue', 'red']):
-            plot_query = f'{cattype}-{id}-{ch}'
-            try:
+        try:
+            for ch, clr in zip(['C1', 'C4'],['blue', 'red']):
+                plot_query = f'{cattype}-{id}-{ch}'
                 dat2plot = rearr_datasets[plot_query]['data']
                 title = f'{cattype}-{id}'
                 pc = [fit['pc'] for fit in dat2plot['fit']]
                 time = np.linspace(0, 30-1/3, 90)[:len(pc)]
                 ax_graph.plot(time, pc, linewidth = 2, color = clr, label = ch)
-            except KeyError:
-                pass
+            ax_graph.legend()
+        except KeyError:
+            pass
         try:
             calling, summary = exp_summary(parse_desc(rearr_datasets[plot_query]['desc']))
             if calling == 'Positive':
@@ -111,7 +112,6 @@ for i, id in enumerate(sorted(idlist)):
             else:
                 title_clr = 'magenta'
             ax_graph.set_title(f'{title} ({calling})', color = title_clr)
-            ax_graph.legend()
             ax_graph.set_xlabel('time (min)')
             ax_graph.set_ylabel('Current ($\mu$A)')
 
