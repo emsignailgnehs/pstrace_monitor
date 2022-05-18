@@ -90,6 +90,7 @@ for idx, file_id in enumerate(list(rearr_datasets.keys())):
     i = idx // 4
     row_pc_vs_t = i * 4
     row_summary = i * 4 + 2
+    cattype, id = file_id.split('-')
 
     ax_graph = fig.add_subplot(gs[row_pc_vs_t, col])
     try:
