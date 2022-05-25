@@ -112,6 +112,7 @@ for i, id in enumerate(sorted(idlist)):
             else:
                 title_clr = 'magenta'
             ax_graph.set_title(f'{title} ({calling})', color = title_clr)
+            ax_graph.set_ylim([0, 30])
             ax_graph.set_xlabel('time (min)')
             ax_graph.set_ylabel('Current ($\mu$A)')
 
