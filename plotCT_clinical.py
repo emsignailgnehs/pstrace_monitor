@@ -63,7 +63,22 @@ if __name__ == '__main__':
         pickleFiles = [picklefile]
         dataSource.load_picklefiles(pickleFiles)
 
-        X, y, names,devices = removeDuplicates(*dataSource.exportXy())
+        data = dataSource.rawView.get('data',[])
+        results = []
+        for d in data:
+            t = timeseries_to_axis(d['data']['time'])
+            pc = [i['pc'] for i in d['data']['fit']]
+            # this '_channel' is actually the device name.
+            results.append([(t,pc), True, d.get('name','No Name'),d.get('_channel','Unknown'),d.get('name','C0')[-2:]])
+
+        results.sort(key=lambda x:(x[4],x[2]))
+        traces = [i[0] for i in results]
+        userMark = [i[1] for i in results]
+        names = [i[2] for i in results]
+        devices = [i[3] for i in results]
+        rearr_dataset = convert_list_to_X(traces),np.array(userMark),np.array(names),np.array(devices)
+
+        X, y, names,devices = removeDuplicates(*rearr_dataset)
         sorted_names = sort_datasets(names)
         idx_flag = [list(names).index(name) for name in sorted_names]
 
@@ -71,6 +86,7 @@ if __name__ == '__main__':
         names = sort_by_idxflag(names, idx_flag)
         devices = sort_by_idxflag(devices, idx_flag)
         y = np.array([1] * len(X))
+
 
         # print('Total curve count is : '+str(len(X)))
         # print("Total Positive Data: "+str(sum(y)))
@@ -135,6 +151,7 @@ if __name__ == '__main__':
             ('logCt',HyperCt()),
             ('predictor',SdPrPredictor(prominence=0.2,sd=0.106382))
         ])
+
         hCtpred_X = hCtTPredictT.transform(X)
         print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
 
@@ -143,7 +160,8 @@ if __name__ == '__main__':
         #############################################################################
         # plot the data                                                             #
         # overwrite column numbers; set to 0 to determine automatically             #
-        #                                                                           #
+        #
+                                               #
         # ██████╗ ██╗      ██████╗ ████████╗██████╗  █████╗ ██████╗  █████╗         #
         # ██╔══██╗██║     ██╔═══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔══██╗        #
         # ██████╔╝██║     ██║   ██║   ██║   ██████╔╝███████║██████╔╝███████║        #
