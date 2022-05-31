@@ -87,7 +87,6 @@ if __name__ == '__main__':
         devices = sort_by_idxflag(devices, idx_flag)
         y = np.array([1] * len(X))
 
-
         # print('Total curve count is : '+str(len(X)))
         # print("Total Positive Data: "+str(sum(y)))
         # print("Total Negative Data: "+str(len(y)-sum(y)))
