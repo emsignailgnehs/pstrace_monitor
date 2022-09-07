@@ -100,7 +100,6 @@ def ParseVarString(varstr):
     val = val - 2**27               #substract the offset binary part to make it a signed value
     return ValConverter(val,SIP)    #return the converted floating point value
 
-
 def ParseResultsFromLine(res_line):
     lval= list()                            #Create a list for values
     lvt= list()                             #Create a list for values
@@ -272,8 +271,6 @@ def constructScript(settings):
             scripts.append({'script': '\n'.join(script) ,'gap':gap, 'repeat':rpt, 'wait':wait})
         return {'interval':interval,'repeats':repeats,
             'scripts': scripts, 'duration':duration, 'autoERange':autoERange, }
-
-
 
     return "None"
 
