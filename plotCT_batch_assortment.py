@@ -323,7 +323,7 @@ if __name__ == '__main__':
         else:
             print('Running Regular Compiler')
             PlotCT()
-    except:
+    except IndexError:
         print('No Test Type Assigned... Running Regular Compiler')
         PlotCT()
     #
