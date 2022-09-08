@@ -48,19 +48,19 @@ class IO_Paths:
     def get_user_inputs(self):
         self.root_folder = self.ui_getdirectory()
         savename = input("Please input the name of the output batch file...\n")
-        self.picklefile = Path(fr'{self.root_folder}\\{savename}.csv')
+        self.picklefile = Path(self.root_folder, f'{savename}.csv')
 
     def get_filepaths(self, file_suffix):
         primaryfolders = [dir[1] for dir in os.walk(self.root_folder)][0]
-        primarypaths = [Path(fr'{self.root_folder}\{folder}') for folder in primaryfolders if re.findall(r'\d{4}[-]\d{2}', folder)]
+        primarypaths = [Path(self.root_folder, folder) for folder in primaryfolders if re.findall(r'\d{4}[-]\d{2}', folder)]
         secondaryfolder_paths = []
         for primarypath in primarypaths:
             secondaryfolders = [dir[1] for dir in os.walk(primarypath)][0]
-            secondaryfolder_paths += [Path(fr'{primarypath}\\{secondaryfolder}') for secondaryfolder in secondaryfolders]
+            secondaryfolder_paths += [Path(primarypath, secondaryfolder) for secondaryfolder in secondaryfolders]
         filepaths = []
         for secondaryfolder_path in secondaryfolder_paths:
             filenames = [dir[2] for dir in os.walk(secondaryfolder_path)][0]
-            filepaths += [Path(fr'{secondaryfolder_path}\\{filename}') for filename in filenames if filename.endswith(file_suffix)]
+            filepaths += [Path(secondaryfolder_path, filename) for filename in filenames if filename.endswith(file_suffix)]
         self.filepaths = filepaths
     
     def ui_getdirectory(self):
