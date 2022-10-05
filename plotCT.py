@@ -78,18 +78,6 @@ hCtT = Pipeline([
     
 ])
 hCtT_X = hCtT.transform(X)
-# 
-# hCtTPredictT = Pipeline([
-#     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-#     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-#     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-#     ('Derivitive', Derivitive(window=31, deg=3)),
-#     ('peak', FindPeak()),
-#     ('logCt',HyperCt()),
-#     ('predictor',CtPredictor(ct=22,prominence=0.22,sd=0.05))
-# ])
-# hCtpred_X = hCtTPredictT.transform(X)
-
 
 hCtTPredictT = Pipeline([
     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
@@ -98,9 +86,21 @@ hCtTPredictT = Pipeline([
     ('Derivitive', Derivitive(window=31, deg=3)),
     ('peak', FindPeak()),
     ('logCt',HyperCt()),
-    ('predictor',SdPrPredictor(prominence=0.2,sd=0.106382))
+    ('predictor',CtPredictor(ct=20,prominence=0,sd=0.1))
 ])
 hCtpred_X = hCtTPredictT.transform(X)
+
+
+# hCtTPredictT = Pipeline([
+#     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+#     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+#     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+#     ('Derivitive', Derivitive(window=31, deg=3)),
+#     ('peak', FindPeak()),
+#     ('logCt',HyperCt()),
+#     ('predictor',SdPrPredictor(prominence=0.2,sd=0.106382))
+# ])
+# hCtpred_X = hCtTPredictT.transform(X)
 print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
 
 
