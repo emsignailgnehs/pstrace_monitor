@@ -406,7 +406,7 @@ class CtPredictor(BaseEstimator,TransformerMixin):
         """
         return 0,1 flag, thresholdCt, prominence, signal drop at 5min
         """
-        return int(x[-1]<=self.ct and x[1]>=self.prominence and x[5]>=self.sd),x[-1],x[1],x[5]
+        return int(x[-1]<=self.ct and x[1]>=self.prominence and x[8]>=self.sd),x[-1],x[1],x[5]
         
     def transform(self,X,y=None):        
         return np.apply_along_axis(self.transformer,1,X)
