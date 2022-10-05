@@ -32,8 +32,6 @@ dataSource.load_picklefiles(pickleFiles)
 
 X, y, names,devices = removeDuplicates(*dataSource.exportXy())
 
-X[0]
-
 
 print('Total curve count is : '+str(len(X)))
 print("Total Positive Data: "+str(sum(y)))
@@ -82,7 +80,7 @@ hCtTPredictT = Pipeline([
     ('Derivitive', Derivitive(window=31, deg=3)),
     ('peak', FindPeak()),
     ('logCt',HyperCt()),
-    ('predictor',CtPredictor(ct=22,prominence=0.22,sd=0.05))
+    ('predictor',CtPredictor(ct=20,prominence=0,sd=0.1))
 ])
 hCtpred_X = hCtTPredictT.transform(X)
 
