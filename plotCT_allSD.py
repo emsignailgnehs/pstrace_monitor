@@ -3,6 +3,7 @@ from utils._util import ViewerDataSource
 import matplotlib.pyplot as plt
 import numpy as np
 from utils.calling_algorithm import *
+from utils.calling_algorithm import _version
 from sklearn.pipeline import Pipeline
 import textwrap
 import csv
@@ -177,8 +178,8 @@ for i,j in enumerate(y):
 plt.tight_layout()
 
 # save to figure
-fig.savefig(picklefile+'.'+format,dpi=300)
-print(f"Curve plot is saved to {picklefile+'.'+format}.")
+fig.savefig(f'{picklefile}_{_version}.{format}' ,dpi=300)
+print(f"Curve plot is saved to {picklefile}_{_version}.{format}.")
 
 
 
