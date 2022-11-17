@@ -186,7 +186,7 @@ print(f"Curve plot is saved to {picklefile+'.'+format}.")
 features = ['hyperCt', 'Pr', 'Sd3m', 'Sd5m', 'Sd10m', 'Sd15m', 'SdEnd']
 
 # write result to csv file
-with open(f'{picklefile}.csv', 'w', newline='') as f:
+with open(f'{picklefile}_{_version}.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['Name', 'Mark','Predict','Device']+features)
     for i, j in enumerate(y):
