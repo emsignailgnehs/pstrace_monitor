@@ -11,6 +11,12 @@ from scipy.signal import savgol_filter
 from scipy import signal
 from scipy.optimize import least_squares
 
+"""
+version 1.0.0
+
+Update Note:
+2022/11/17: Change the Ct definition to Ct = left_ips
+"""
 
 def get_picklez(folder):
     fs = []
@@ -317,7 +323,7 @@ class LogCt(BaseEstimator,TransformerMixin):
             if sthre > 0:
                 break
             thresholdCt = sT
-        return  [*X[0:-3],*thresholdpara,thresholdCt]
+        return  [*X[0:-3],*thresholdpara,left_ips]
           
     def transform(self,X,y=None):        
         return np.array([self.transformer(i) for i in X])

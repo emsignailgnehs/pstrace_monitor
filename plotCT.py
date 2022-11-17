@@ -42,10 +42,10 @@ print("Total Positive Data: "+str(sum(y)))
 print("Total Negative Data: "+str(len(y)-sum(y)))
 
 #%% Calculate
-cutoffStart = 5
+cutoffStart = 2
 cutoffEnd = 30
-normStart = 5
-normEnd = 10
+normStart = cutoffStart
+normEnd = cutoffStart + 1
 
 t0 = time.perf_counter()
 print('Calculating...')
