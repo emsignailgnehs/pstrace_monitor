@@ -371,7 +371,7 @@ class HyperCt(BaseEstimator,TransformerMixin):
             if sthre > 0:
                 break
             thresholdCt = sT
-        return  [*X[0:-3],*thresholdpara,thresholdCt]
+        return  [*X[0:-3],*thresholdpara,left_ips]
           
     def transform(self,X,y=None):        
         return np.array([self.transformer(i) for i in X])
