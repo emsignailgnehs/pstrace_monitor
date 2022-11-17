@@ -12,11 +12,11 @@ from scipy import signal
 from scipy.optimize import least_squares
 
 """
-version 1.0.0
-
 Update Note:
 2022/11/17: Change the Ct definition to Ct = left_ips
 """
+
+_version = '2stage_prescan_v1.0.4'
 
 def get_picklez(folder):
     fs = []

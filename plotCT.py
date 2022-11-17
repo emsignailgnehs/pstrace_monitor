@@ -10,8 +10,6 @@ from itertools import combinations
 import time
 
 """
-version 1.0.0
-
 Update Note:
 2022/11/17: Change the Ct definition to Ct = left_ips
 """
@@ -188,7 +186,7 @@ print(f"Curve plot is saved to {picklefile+'.'+format}.")
 features = ['hyperCt', 'Pr', 'Sd5m']
 
 # write result to csv file
-with open(f'{picklefile}.csv', 'w', newline='') as f:
+with open(f'{picklefile}_{_version}.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['Name', 'Mark','Predict','Device']+features)
     for i, j in enumerate(y):
