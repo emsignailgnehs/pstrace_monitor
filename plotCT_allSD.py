@@ -49,7 +49,7 @@ print("Total Negative Data: "+str(len(y)-sum(y)))
 
 #%% Calculate
 cutoffStart = 2
-cutoffEnd = 30
+cutoffEnd = 25
 normStart = cutoffStart
 normEnd = cutoffStart + 1
 
