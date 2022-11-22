@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
 from scipy.optimize import curve_fit
-
-from matplotlib.animation import FuncAnimation
-from matplotlib.lines import Line2D
+import warnings
 
 
 def find_nearest(array, value):
@@ -39,6 +39,7 @@ class CallerRunner():
             self.res = '-'
             self.call_Ct = self.t[-1]
             self.call_Sd = 0
+            self.call_time = self.t[-1]
         
         false_res = {('+', '-'):'FALSE POSITIVE',
                      ('-', '+'):'FALSE NEGATIVE',
@@ -54,7 +55,7 @@ class CallerRunner():
 class RealTimeCaller:
     
     def __init__(self, t, pc, dataln=None, smoothln=None, derivln=None, 
-                 peakln=None, window=7):
+                 peakln=None, baseln=None, window=7):
         self.i  = 0
         self.t  = [t]
         self.pc = [pc]
@@ -66,6 +67,7 @@ class RealTimeCaller:
         self.smoothln = smoothln
         self.derivln = derivln
         self.peakln  = peakln
+        self.baseln  = baseln
         
         # Hardcoded constants
         self.normalizeRange = (2,3) # Normalize peak currents to average between these times
@@ -149,6 +151,7 @@ class RealTimeCaller:
         if hasattr(self, 'peak_props'):
             # Peak found
             self.estimate_ct()
+            self.baseln.set_data(self.t, self.threshold)
         
         if (self.Ct and not self.result):
             pos = self.call_result()
@@ -156,7 +159,7 @@ class RealTimeCaller:
                 self.result = True
                 print(f'Called positive @ t = {self.t[-1]:0.2f}. Ct = {self.Ct:0.2f}, Sd = {self.Sd:0.2f}')
         
-        return [self.dataln, self.smoothln, self.derivln, self.peakln]
+        return [self.dataln, self.smoothln, self.derivln, self.peakln, self.baseln]
         
         
     def smooth(self, i):                
@@ -248,12 +251,34 @@ class RealTimeCaller:
         pc = np.array(self.smoothed)
         left_ips = self.peak_props['left_ips']
         
-        threshold = (1-offset)*self.norm_val
+        # self.threshold = (1-offset)*self.norm_val*np.ones(len(t))
+        
+        # Find region to fit between normalizeRange[1] and left_ips
+        idxs = np.where(
+                    np.logical_and(t > self.normalizeRange[0],
+                                   t < left_ips - 1.5)
+                    )[0]
+        if len(idxs) < 5:
+            self.threshold = np.zeros(len(t))
+            return
+        
+        lb, rb = idxs[0], idxs[-1]
+        
+        def lin_eq(t, m, b):
+            return m*t + b
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            popt, pcov = curve_fit(lin_eq, t[lb:rb], pc[lb:rb])
+        m, b = popt
+        self.threshold = lin_eq(t, m, 0.95*b)
+        
         Ct_idx = 0
         for i, val in enumerate(pc):
             if t[i] > self.normalizeRange[1]:
                 # print(self.t[i])
-                if val < threshold:
+                if val < self.threshold[i]:
+                    tval = self.threshold[i]
                     Ct     = t[i]
                     Ct_idx = i
                     break
@@ -262,7 +287,7 @@ class RealTimeCaller:
         if Ct_idx != 0:
             test_ts = np.linspace(t[Ct_idx-1], t[Ct_idx], 1000)
             test_ys = np.linspace(pc[Ct_idx-1], pc[Ct_idx], 1000)    
-            nearest_idx = np.abs(test_ys - threshold).argmin()
+            nearest_idx = np.abs(test_ys - tval).argmin()
             nearest_t = test_ts[nearest_idx]
             self.Ct = nearest_t   
         return
