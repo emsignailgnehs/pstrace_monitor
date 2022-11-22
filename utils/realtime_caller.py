@@ -38,6 +38,7 @@ class CallerRunner():
         if self.rtc.result == False:
             self.res = '-'
             self.call_Ct = self.t[-1]
+            self.call_Sd = 0
         
         false_res = {('+', '-'):'FALSE POSITIVE',
                      ('-', '+'):'FALSE NEGATIVE',
@@ -287,12 +288,19 @@ class RealTimeCaller:
         # Calculate signal drop
         # Starting signal = normalized pc at left ips
         start_idx, start_t = find_nearest(self.t, 
-                                           self.peak_props['left_ips'])
-        start_pc = self.norm_pc[start_idx]
+                                          self.peak_props['left_ips'])
+        end_idx, end_t = find_nearest(self.t, 
+                                      self.peak_props['left_ips'] + 5)
         
-        Sd = start_pc - self.norm_pc[-1]
+        start_pc = self.norm_pc[start_idx]
+        end_pc   = self.norm_pc[end_idx]
+        Sd       = start_pc - end_pc
+        
         self.Sd = Sd
+        
         if (Ct <= 20 and Sd >= 0.1):
             return 1
         else:
             return 0
+
+
