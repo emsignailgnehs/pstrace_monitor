@@ -353,6 +353,7 @@ class HyperCt(BaseEstimator,TransformerMixin):
         offset = self.offset
         t,deri,smoothed_c = X[-3:]
         left_ips,peak_prominence,peak_width = X[0:3]
+        # tofit = smoothed_c values between t[0] and left_ips, excluding left_ips
         tofit = findTimeVal(t,smoothed_c,t[0],left_ips - t[0])
         
         fitres = least_squares(self.hyper,x0=[5,5,0.5],

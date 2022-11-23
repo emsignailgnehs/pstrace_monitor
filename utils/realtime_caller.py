@@ -24,9 +24,11 @@ class CallerRunner():
     def run(self, printout=True):
         frames = [(self.t[i], self.pc[i]) for i in range(1, len(self.t))]
         
+        self.rtc.update_noplot(frames[0][0], frames[0][1])
+        
         for (t, pc) in frames:
-            self.rtc.update(t, pc)
-            call_time, call_Ct, call_Sd = self.rtc.run_analysis()
+            # self.rtc.update(t, pc)
+            call_time, call_Ct, call_Sd = self.rtc.update_noplot(t, pc)
             if (call_time != 0):
                 self.call_time = call_time
                 self.call_Ct   = call_Ct
@@ -55,7 +57,7 @@ class CallerRunner():
 class RealTimeCaller:
     
     def __init__(self, t, pc, dataln=None, smoothln=None, derivln=None, 
-                 peakln=None, baseln=None, window=7):
+                 peakln=None, baseln=None, window=11):
         self.i  = 0
         self.t  = [t]
         self.pc = [pc]
@@ -80,6 +82,14 @@ class RealTimeCaller:
         # list slicing by list of indices
         return [val for i,val in enumerate(list) if i in idxs]
     
+    def plot_final(self):
+        # for debugging
+        fig, ax = plt.subplots()
+        ax.plot(self.t, self.pc, 'o')
+        ax.plot(self.t, self.smoothed, 'k--')
+        ax.plot(self.t, self.threshold, 'k--')
+        ax.plot(self.t, 5+np.mean(self.smoothed)*self.dy, '--', color='orange')
+        
         
     def update(self, t, pc):
         self.i += 1
@@ -100,15 +110,10 @@ class RealTimeCaller:
         self.smooth(self.i)
         self.update_dy()
     
-    def run_analysis(self):        
-        # Set data on dy line
-        # Don't plot early dy/dt points
-        # valid_idxs = self.truncate(5, 30)
-        # t  = self._slice(self.t, valid_idxs)
-        # dy = self._slice(self.dy, valid_idxs)
-        # dy = np.array(dy)
-        # self.derivln.set_data(t, 25+dy)
-        # self.derivln.set_data(self.t[1:], self.dy)
+    
+    def update_noplot(self, t, pc):    
+        # t, pc = data
+        self.update(t, pc)
         self.find_peaks()
         
         if hasattr(self, 'peak_props'):
@@ -128,6 +133,7 @@ class RealTimeCaller:
         # Get new data point
         t, pc = data
         self.update(t, pc)
+        print(t, pc)
         
         # Set data on raw and smoothed lines
         self.dataln.set_data(self.t, self.pc)
@@ -135,11 +141,11 @@ class RealTimeCaller:
         
         # Set data on dy line
         # Don't plot early dy/dt points
-        valid_idxs = self.truncate(5, 30)
+        valid_idxs = self.truncate(2, 30)
         t  = self._slice(self.t, valid_idxs)
         dy = self._slice(self.dy, valid_idxs)
         dy = np.array(dy)
-        self.derivln.set_data(t, 25+dy)
+        self.derivln.set_data(t, 25+10*dy)
         # self.derivln.set_data(self.t[1:], self.dy)
         
         idx, peak_time, peak_prom = self.find_peaks()
@@ -158,7 +164,8 @@ class RealTimeCaller:
             if pos:
                 self.result = True
                 print(f'Called positive @ t = {self.t[-1]:0.2f}. Ct = {self.Ct:0.2f}, Sd = {self.Sd:0.2f}')
-        
+
+
         return [self.dataln, self.smoothln, self.derivln, self.peakln, self.baseln]
         
         
@@ -191,9 +198,16 @@ class RealTimeCaller:
             
         dy = [vals[i] - vals[i-1] for i in range(1, len(self.t))]
         dy = [dy[0]] + dy
+        
+        window = self.window
+        if len(self.t) > 50:
+            window = 31
+            
+        
         try:
-            dy = savgol_filter(dy, self.window, polyorder=1, 
-                                    deriv=0)
+            # dy = savgol_filter(dy, self.window, polyorder=1, 
+                                    # deriv=0)
+            dy = savgol_filter(vals, window, polyorder=3, deriv=1)
             dy *= -100
         except:
             # Not enough data to fit filter yet
@@ -202,23 +216,24 @@ class RealTimeCaller:
         return self.dy
     
     
-    def truncate(self, cutoffStart=4, cutoffEnd=25):
+    def truncate(self, cutoffStart=2, cutoffEnd=25):
         # Return indices that fall between cutoffStart and cutoffEnd
         idxs = [i for i,t in enumerate(self.t) 
                 if (t >= cutoffStart and t <= cutoffEnd)]
         return idxs
     
     
-    def find_peaks(self):
+    def find_peaks(self, relheightlimit=0.9, widthlimit=0.05):
         valid_idxs = self.truncate(2, 30)
         if len(valid_idxs) < 10:
             return 0,0,0
         t  = np.array(self._slice(self.t, valid_idxs))
         dy = np.array(self._slice(self.dy, valid_idxs))
         
-        heightlimit = np.quantile(np.absolute(dy[0:-1] - dy[1:]), 0.3)
+        heightlimit = np.quantile(np.absolute(dy[0:-1] - dy[1:]), relheightlimit)
         peaks, props = find_peaks(dy,prominence = heightlimit,
-                                   width = len(dy)*0.05, rel_height = 0.5)
+                                   width = len(dy)*widthlimit, rel_height = 0.5)
+        
         # Choose most prominent peak
         normalizer = (t[-1] - t[0])/len(t)
         try:
@@ -241,46 +256,75 @@ class RealTimeCaller:
         
         
     
-    def estimate_ct(self, offset=0.05):
+    def estimate_ct(self, offset=0.05, method='linear'):
         '''
         calculate Ct from threshold method
-        
-        threshold line is flat line "offset" below the normalization value
         '''
         t = np.array(self.t)
         pc = np.array(self.smoothed)
         left_ips = self.peak_props['left_ips']
-        
-        # self.threshold = (1-offset)*self.norm_val*np.ones(len(t))
+
         
         # Find region to fit between normalizeRange[1] and left_ips
+        # if (left_ips - self.normalizeRange[0]) > 5:
+        #     # Fit to 5 min before left_ips if possible
+        #     idxs = np.where(np.logical_and(t > left_ips - 10,
+        #                                     t < left_ips)
+        #                     )[0]
+        # else:
+        # idxs = np.where(
+        #             np.logical_and(t > self.normalizeRange[0],
+        #                             t < left_ips)
+        #             )[0]
+        
         idxs = np.where(
-                    np.logical_and(t > self.normalizeRange[0],
-                                   t < left_ips - 1.5)
+                    np.logical_and(t >=3,
+                                    t <= left_ips)
                     )[0]
+        
         if len(idxs) < 5:
             self.threshold = np.zeros(len(t))
             return
         
         lb, rb = idxs[0], idxs[-1]
-        
-        def lin_eq(t, m, b):
+
+        # Determine what fitting function to use
+        # Make sure last parameter is always the constant y offset
+        def linear(t, m, b):
             return m*t + b
         
+        def hyper(t, p0, p1, p2):
+            return p0/(t+p1) + p2
+        
+        func = {'hyper':hyper, 'linear':linear}.get(method)
+        
+        # Do fitting
         with warnings.catch_warnings():
             warnings.simplefilter('error')
-            popt, pcov = curve_fit(lin_eq, t[lb:rb], pc[lb:rb])
-        m, b = popt
-        self.threshold = lin_eq(t, m, 0.95*b)
+            try:
+                popt, pcov = curve_fit(func, t[lb:rb], pc[lb:rb], maxfev=1000)
+            except RuntimeError:
+                # func = linear
+                # popt, pcov = curve_fit(func,t[lb:rb], pc[lb:rb])
+                self.threshold = np.zeros(len(t))
+                return
         
+        self.threshold = func(t, *popt[:-1], (1-offset)*popt[-1])
+        
+        # Find where smoothed curve crosses threshold line
+        # Go backwards in case there are multiple crossings
         Ct_idx = 0
         for i, val in enumerate(pc):
-            if t[i] > self.normalizeRange[1]:
+            # if t[i] > self.normalizeRange[1]:
+            if t[i] > left_ips:
                 # print(self.t[i])
                 if val < self.threshold[i]:
                     tval = self.threshold[i]
                     Ct     = t[i]
                     Ct_idx = i
+                    if Ct < left_ips-5:
+                        print(left_ips)
+                        continue
                     break
         
         # Refine threshold crossing time by linear interpolation
@@ -291,6 +335,7 @@ class RealTimeCaller:
             nearest_t = test_ts[nearest_idx]
             self.Ct = nearest_t   
         return
+    
     
     
     def normalize(self, t, pc, mode='mean'):  
@@ -306,7 +351,7 @@ class RealTimeCaller:
         norm_pc  = pc/norm_val
         return list(norm_pc)
     
-    def call_result(self):
+    def call_result(self, Ct_thresh=25, Sd_thresh=0.10):
         
         Ct = self.Ct
         
@@ -314,16 +359,19 @@ class RealTimeCaller:
         # Starting signal = normalized pc at left ips
         start_idx, start_t = find_nearest(self.t, 
                                           self.peak_props['left_ips'])
-        end_idx, end_t = find_nearest(self.t, 
-                                      self.peak_props['left_ips'] + 5)
+        # end_idx, end_t = find_nearest(self.t, 
+        #                               self.peak_props['left_ips'] + 5)
         
         start_pc = self.norm_pc[start_idx]
-        end_pc   = self.norm_pc[end_idx]
+        end_pc   = self.norm_pc[-1]
+        # end_pc   = self.norm_pc[end_idx]
         Sd       = start_pc - end_pc
         
         self.Sd = Sd
         
-        if (Ct <= 20 and Sd >= 0.1):
+        # print(f'{self.t[-1]:0.2f} Ct: {Ct:0.2f}, Sd: {Sd:0.2f}')
+        
+        if (Ct <= Ct_thresh and Sd >= Sd_thresh):
             return 1
         else:
             return 0

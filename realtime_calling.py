@@ -22,12 +22,13 @@ def extract_data(file):
     return X, y, names, devices
 
 
-def run_with_plot(file):  
+def run_with_plot(file, i = 2):  
     X, y, names, devices = extract_data(file)
     
-    t, pc = X[2][0], X[2][1]
+    X = X[i]
+    t, pc = X[0], X[1]
     
-    datastream = [(t[i], pc[i]) for i in range(1, len(t))]
+    datastream = [(t[i], pc[i]) for i in range(0, len(t))]
             
     fig, ax = plt.subplots(figsize=(10,10))
     ax.set_ylim(0, 50)
@@ -36,10 +37,12 @@ def run_with_plot(file):
     smoothln, = ax.plot([],[], '--', color='k', lw=2)
     derivln, = ax.plot([],[], '--', color='orange', lw=2)
     peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+    baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
     
-    rtc = RealTimeCaller(t[0], pc[0], dataln, smoothln, derivln, peakln)
-    ani     = FuncAnimation(fig, rtc.update_plot, interval=50, blit = True,
+    rtc = RealTimeCaller(t[0], pc[0], dataln, smoothln, derivln, peakln, baseln)
+    ani     = FuncAnimation(fig, rtc.update_plot, interval=10, blit = True,
                             frames = datastream, repeat=False)
+
     plt.show()    
     return rtc, ani
 
@@ -126,7 +129,8 @@ class Comparator:
         prediction = {'res': True if runner.res=='+' else False,
                       'Ct': runner.call_Ct,
                       'Pr': 0,
-                      'Sd': runner.call_Sd}
+                      'Sd': runner.call_Sd,
+                      'call_time': runner.call_time}
         return prediction
     
     def compare(self):
@@ -148,10 +152,16 @@ class Comparator:
             d[(r, s)] == 'False negative'):
             rtc = self.runner.rtc
             fig, ax = plt.subplots()
-            ax.set_title(d[(r, s)])
-            ax.plot(rtc.t, rtc.norm_pc)
+            ax.set_title(d[(r, s)] + f'Ct:{rtc.Ct}')
+            ax.plot(rtc.t, rtc.pc, 'o-')
+            ax.plot(rtc.t, rtc.threshold, 'k--')
+            ax.plot(rtc.t[-len(rtc.dy)+15:], 5+np.mean(rtc.threshold)*rtc.dy[15:], '--')
+            ax.plot([rtc.peak_time, rtc.peak_time], 
+                    [5+np.mean(rtc.threshold)*rtc.dy[rtc.peak_idx], 
+                     3+np.mean(rtc.threshold)*rtc.dy[rtc.peak_idx]], 'bo-')
+            ax.axvline(rtc.peak_props['left_ips'])
         
-        return _eval(r), _eval(s), d[(r, s)]
+        return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
 
 
 
@@ -160,24 +170,27 @@ if __name__ == '__main__':
     file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
 
     files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
-    "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
-    "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
-    "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
-    "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
-    "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"]
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"
+    ]
     
     # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
     
-    # rtc, ani = run_with_plot(file)
+    
+    
+    # rtc, ani = run_with_plot(file, 10)
     
     folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
     import os
     
     i = 0 # count total number of sensors evaluated
     d = {'True positive': [],
-         'True negative': [],
-         'False positive': [],
-         'False negative': []}
+          'True negative': [],
+          'False positive': [],
+          'False negative': []}
     
     for file in os.listdir(folder):
         if file.endswith('.picklez'):
@@ -187,13 +200,38 @@ if __name__ == '__main__':
             data_list = [l for l in zip(*data)]
             for (X, y, name, device) in data_list:
                 comp = Comparator(X, y, name, device)
-                rt_res, st_red, res = comp.compare()
+                rt_res, st_red, res, call_time = comp.compare()
                 
-                d[res].append((file, name, device))
-                print(f'{res}     {name}')
+                d[res].append((file, name, device, call_time))
+                # print(f'{res}     {file}')
+                if res == 'False negative':
+                    print(f'false negative {file}')
+                if res == 'False positive':
+                    print(f'false positive {file}')
                 
                 i += 1
+            
+            # if i > 150:
+            #     break
                 
+    for key, l in d.items():
+        print(f'{key}: {len(l)}')
+                
+    
+    # file = os.path.join(folder, '20221114 45% and 100% heating.picklez')
+    # file = os.path.join(folder, '20221110 R23=390Ohm.picklez')
+    # file = os.path.join(folder, '20221121 batch 5.picklez')
+    
+    # rtc, ani = run_with_plot(file, 7)
+    
+    # data = extract_data(file)
+    # data_list = [l for l in zip(*data)]
+    # # data_list = [data_list[2]]
+    # for (X, y, name, device) in data_list:
+    #     comp = Comparator(X, y, name, device)
+    #     rt_res, st_res, res, call_time = comp.compare()
+    #     print(rt_res, st_res)
+    
     
     
     

@@ -26,12 +26,19 @@ Update Note:
 #### ╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚══════╝ ####
 #### Change this manually if running code in terminal.                      ####
 ################################################################################
-picklefile = r"C:\Users\hui\RnD\Projects\LAMP-Covid Sensor\Data Export\20220223\20220223 SL fresh vs store caps_ fresh vs stored sensors.picklez"
+# picklefile = r"C:\Users\hui\RnD\Projects\LAMP-Covid Sensor\Data Export\20220223\20220223 SL fresh vs store caps_ fresh vs stored sensors.picklez"
+# picklefile = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
+# picklefile = r"C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez"
+# picklefile = r"C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez"
+# picklefile = r"C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez"
+# picklefile = r"C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez"
+# picklefile = r"C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez"
+picklefile = r'C:\\Users\\Elmer Guzman\\Desktop\\covid sensor data\\20221114 45% and 100% heating.picklez'
 #%% user end input
 
 
-if __name__ == '__main__':
-    picklefile = input('Enter picke file:\n').strip(' "')
+# if __name__ == '__main__':
+#     picklefile = input('Enter picke file:\n').strip(' "')
 
 #%% load data
 print(f'File you entered is: {picklefile}')
