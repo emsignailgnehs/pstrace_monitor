@@ -1,10 +1,33 @@
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from matplotlib.lines import Line2D
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
 from scipy.optimize import curve_fit
 import warnings
+from functools import partial
+
+
+
+def extract_data(file):
+    dataSource = ViewerDataSource()
+    pickleFiles = [file]
+    dataSource.load_picklefiles(pickleFiles)
+
+
+    X, y, names,devices = removeDuplicates(*dataSource.exportXy())
+    return X, y, names, devices
+
+
+def get_range(array, low, high):
+    # Return idxs and array values where array values are
+    # between low and high
+    array = np.array(array)
+    idxs = np.where(
+                np.logical_and(array >= low,
+                               array <= high)
+                )[0]
+    
+    return idxs, array[idxs]
 
 
 def find_nearest(array, value):
@@ -13,229 +36,165 @@ def find_nearest(array, value):
     return idx, array[idx]
 
 
-class CallerRunner():
-     # Class to simulate running calling algorithm in real time
-    def __init__(self, t, pc, y):
-        self.t = t
-        self.pc = pc
-        self.rtc = RealTimeCaller(t[0], pc[0])
-        self.y = '+' if y else '-'
-    
-    def run(self, printout=True):
-        frames = [(self.t[i], self.pc[i]) for i in range(1, len(self.t))]
-        
-        self.rtc.update_noplot(frames[0][0], frames[0][1])
-        
-        for (t, pc) in frames:
-            # self.rtc.update(t, pc)
-            call_time, call_Ct, call_Sd = self.rtc.update_noplot(t, pc)
-            if (call_time != 0):
-                self.call_time = call_time
-                self.call_Ct   = call_Ct
-                self.call_Sd   = call_Sd
-                
-                self.res = '+'
-                break
-        
-        if self.rtc.result == False:
-            self.res = '-'
-            self.call_Ct = self.t[-1]
-            self.call_Sd = 0
-            self.call_time = self.t[-1]
-        
-        false_res = {('+', '-'):'FALSE POSITIVE',
-                     ('-', '+'):'FALSE NEGATIVE',
-                     ('-', '-'):'TRUE NEGATIVE',
-                     ('+', '+'):'TRUE POSITIVE'}.get((self.res, self.y))
-        
-        if printout:
-            print(f'P:{self.res}, M:{self.y}   {false_res}    t={self.call_Ct:0.1f}.')
-        
-            
-
-
 class RealTimeCaller:
     
-    def __init__(self, t, pc, dataln=None, smoothln=None, derivln=None, 
-                 peakln=None, baseln=None, window=11):
-        self.i  = 0
-        self.t  = [t]
-        self.pc = [pc]
-        self.window = window
-        self.smoothed = [pc]
-        self.dy = [0]
+    def __init__(self, t0, pc0, dataln=None, smoothln=None, 
+                 derivln=None, peakln=None, baseln=None, window=11):
         
-        self.dataln = dataln
-        self.smoothln = smoothln
-        self.derivln = derivln
-        self.peakln  = peakln
-        self.baseln  = baseln
+        # Initialize variables
+        self.i          = 0      # Index
+        self.t          = [t0]   # Time
+        self.pc         = [pc0]  # Peak Current
+        self.dy         = [0]    # 1st derivative
+        self.smoothed   = [pc0]  # Smoothed peak currents
         
-        # Hardcoded constants
-        self.normalizeRange = (2,3) # Normalize peak currents to average between these times
-        self.norm_val = None
-        self.norm_pc  = []
-        self.Ct = None
-        self.result = False
-    
-    def _slice(self, list, idxs):
-        # list slicing by list of indices
-        return [val for i,val in enumerate(list) if i in idxs]
-    
-    def plot_final(self):
-        # for debugging
-        fig, ax = plt.subplots()
-        ax.plot(self.t, self.pc, 'o')
-        ax.plot(self.t, self.smoothed, 'k--')
-        ax.plot(self.t, self.threshold, 'k--')
-        ax.plot(self.t, 5+np.mean(self.smoothed)*self.dy, '--', color='orange')
+        self.window     = window    # Hanning func smoothing window
+        self.normalizeRange = (2,3) # time bounds for normalization
+        self.norm_val       = 1     # Normalization constant 
+        self.norm_pc        = [pc0] # Normalized currents
+        self.threshold      = [0]   # Threshold line
+        
+        self.Ct             = 1000
+        self.result         = False 
+        self.flag           = False # Flag if positive result has been called
+        self.call_time      = 0
+        
+        # Line2D objects for real-time plotting
+        self.dataln     = dataln
+        self.smoothln   = smoothln
+        self.derivln    = derivln
+        self.peakln     = peakln
+        self.baseln     = baseln
+        self.lines = [self.dataln, self.smoothln, self.derivln,
+                      self.peakln, self.baseln]
         
         
-    def update(self, t, pc):
+    def update(self, data, plots=False):
+        
+        t, pc = data
+        
         self.i += 1
         self.t.append(t)
         self.pc.append(pc)
         
-        
-        if bool(self.norm_val):
-            # Already have norm. constant, just normalize the new value
-            self.norm_pc.append(pc/self.norm_val)
-            
-        if (t > self.normalizeRange[1] and self.norm_val==None):
-            # First time, do normalization
-            vals = self.normalize(self.t, self.pc, mode='mean')
-            self.norm_pc = vals
-           
-        
-        self.smooth(self.i)
-        self.update_dy()
-    
-    
-    def update_noplot(self, t, pc):    
-        # t, pc = data
-        self.update(t, pc)
+        self.smooth()
+        self.normalize()
+        self.calc_dy()
         self.find_peaks()
+        self.calc_Ct()
+        self.evaluate_result()
         
-        if hasattr(self, 'peak_props'):
-            # Peak found
-            self.estimate_ct()
+        if (self.result and not self.flag):
+            print(f'Called positive @ t = {t:0.2f} min.')
+            self.flag = True
+            self.call_time = t
+                
+        if plots:
+            self.update_lines()
+            return *self.lines,
         
-        if (self.Ct and not self.result):
-            pos = self.call_result()
-            if pos:
-                self.result = True
-                return self.t[-1], self.Ct, self.Sd
-        
-        return 0,0,0
+        else:
+            return self.result
     
     
-    def update_plot(self, data):
-        # Get new data point
-        t, pc = data
-        self.update(t, pc)
-        print(t, pc)
-        
-        # Set data on raw and smoothed lines
+    def update_lines(self):
+        # Update plot if doing realtime plotting
         self.dataln.set_data(self.t, self.pc)
         self.smoothln.set_data(self.t, self.smoothed)
+        avg = np.mean(self.smoothed)
+        self.derivln.set_data(self.t, avg+10*np.array(self.dy))
         
-        # Set data on dy line
-        # Don't plot early dy/dt points
-        valid_idxs = self.truncate(2, 30)
-        t  = self._slice(self.t, valid_idxs)
-        dy = self._slice(self.dy, valid_idxs)
-        dy = np.array(dy)
-        self.derivln.set_data(t, 25+10*dy)
-        # self.derivln.set_data(self.t[1:], self.dy)
+        if hasattr(self, 'peak_idx'):
+            self.peakln.set_xdata([self.peak_time, self.peak_time])
+            dy = np.array(self.dy)
+            self.peakln.set_ydata([avg+10*dy[self.peak_idx],
+                                   avg+10*(dy[self.peak_idx]-self.peak_props['prom'])
+                                  ])
         
-        idx, peak_time, peak_prom = self.find_peaks()
-        idx = np.where(self.t == peak_time)[0][0] if idx else 0
-        self.peakln.set_xdata([peak_time, peak_time])
-        self.peakln.set_ydata([25+self.dy[idx], 25+self.dy[idx] - peak_prom])
-        # self.peakln.set_ydata([25, 30])
-        
-        if hasattr(self, 'peak_props'):
-            # Peak found
-            self.estimate_ct()
+        if len(self.threshold) != 1:
             self.baseln.set_data(self.t, self.threshold)
+        return
+    
+    
+    def smooth(self):
+        # Smooth raw peak current data using Hanning window
+        if len(self.t) <= self.window:
+            self.smoothed.append(self.pc[-1])
+            return
         
-        if (self.Ct and not self.result):
-            pos = self.call_result()
-            if pos:
-                self.result = True
-                print(f'Called positive @ t = {self.t[-1]:0.2f}. Ct = {self.Ct:0.2f}, Sd = {self.Sd:0.2f}')
-
-
-        return [self.dataln, self.smoothln, self.derivln, self.peakln, self.baseln]
-        
-        
-    def smooth(self, i):                
-        rbound = i
-        lbound = i - self.window
-        center = i - self.window//2
-        
-        if lbound < 0:
-            self.smoothed.append(self.pc[i])
-            self.dy.append(self.pc[i] - np.average(self.pc[0:i]))
-            return self.pc[i]
-        
-        data = self.pc[lbound:rbound]
-                
-        # Hann window smoothing
         w = np.hanning(self.window)
-        pt = np.convolve(w/w.sum(), data, mode='valid')[0]
+        w = w/w.sum()
         
-        # Modify point and make the list longer
-        self.smoothed[center] = pt
-        self.smoothed.append(self.pc[i])
+        # Somehow applies window over array...
+        x = self.pc
+        s = np.r_[x[self.window-1:0:-1],
+                  x,
+                  x[-2:-self.window-1:-1]
+                  ]
+        arr = np.convolve(w, s, mode='valid')
+        arr = arr[self.window//2 : -(self.window//2)]
+        
+        self.smoothed = arr
+        return self.smoothed
+     
+    
+    def normalize(self, mode='mean'):
+        i = self.i
+        
+        if self.t[i] < self.normalizeRange[1]:
+            # Haven't recorded enough data yet
+            return
+        
+        if self.norm_val != 1.0:
+            # Already normalized
+            self.norm_pc  = self.smoothed/self.norm_val
+            return
         
         
-    def update_dy(self):
-        if bool(self.norm_val):
-            vals = self.norm_pc
-        else:
-            vals = self.smoothed
-            
-        dy = [vals[i] - vals[i-1] for i in range(1, len(self.t))]
-        dy = [dy[0]] + dy
+        func = getattr(np, mode) #np.mean or np.max
+        
+        # Get time slice
+        idxs, _ = get_range(self.t, self.normalizeRange[0],
+                                    self.normalizeRange[1])
+        
+        pc = np.array(self.pc)
+        self.norm_val = func(pc[idxs])
+        self.norm_pc  = self.smoothed/self.norm_val
+        return self.norm_val
+    
+        
+    def calc_dy(self):
+        if (self.norm_val == 1.0 or self.i < self.window):
+            # Don't calculate derivative until after 
+            # normalization time
+            self.dy.append(0)
+            return
         
         window = self.window
-        if len(self.t) > 50:
+        if self.i >= 40:
             window = 31
-            
         
-        try:
-            # dy = savgol_filter(dy, self.window, polyorder=1, 
-                                    # deriv=0)
-            dy = savgol_filter(vals, window, polyorder=3, deriv=1)
-            dy *= -100
-        except:
-            # Not enough data to fit filter yet
-            pass
+        dy = savgol_filter(self.norm_pc, window, polyorder=3,
+                           deriv=1, mode='nearest')
+        dy *= -100
         self.dy = dy
         return self.dy
     
     
-    def truncate(self, cutoffStart=2, cutoffEnd=25):
-        # Return indices that fall between cutoffStart and cutoffEnd
-        idxs = [i for i,t in enumerate(self.t) 
-                if (t >= cutoffStart and t <= cutoffEnd)]
-        return idxs
-    
-    
     def find_peaks(self, relheightlimit=0.9, widthlimit=0.05):
-        valid_idxs = self.truncate(2, 30)
-        if len(valid_idxs) < 10:
-            return 0,0,0
-        t  = np.array(self._slice(self.t, valid_idxs))
-        dy = np.array(self._slice(self.dy, valid_idxs))
+        
+        if len(self.t) < 3:
+            return
+        
+        t  = np.array(self.t)
+        dy = np.array(self.dy)
         
         heightlimit = np.quantile(np.absolute(dy[0:-1] - dy[1:]), relheightlimit)
         peaks, props = find_peaks(dy,prominence = heightlimit,
                                    width = len(dy)*widthlimit, rel_height = 0.5)
         
-        # Choose most prominent peak
         normalizer = (t[-1] - t[0])/len(t)
+        
         try:
             idx   = np.argmax(props['prominences'])
             peak_time  = t[peaks[idx]]
@@ -249,131 +208,135 @@ class RealTimeCaller:
                                'width':peak_width,
                                'left_ips':left_ips,
                                }
-            return peaks[idx], peak_time, peak_prom,
-        except:
-            return 0,0,0
+        except ValueError: # No valid peaks found
+            pass
         
-        
-        
-    
-    def estimate_ct(self, offset=0.05, method='linear'):
-        '''
-        calculate Ct from threshold method
-        '''
-        t = np.array(self.t)
-        pc = np.array(self.smoothed)
-        left_ips = self.peak_props['left_ips']
-
-        
-        # Find region to fit between normalizeRange[1] and left_ips
-        # if (left_ips - self.normalizeRange[0]) > 5:
-        #     # Fit to 5 min before left_ips if possible
-        #     idxs = np.where(np.logical_and(t > left_ips - 10,
-        #                                     t < left_ips)
-        #                     )[0]
-        # else:
-        # idxs = np.where(
-        #             np.logical_and(t > self.normalizeRange[0],
-        #                             t < left_ips)
-        #             )[0]
-        
-        idxs = np.where(
-                    np.logical_and(t >=3,
-                                    t <= left_ips)
-                    )[0]
-        
-        if len(idxs) < 5:
-            self.threshold = np.zeros(len(t))
-            return
-        
-        lb, rb = idxs[0], idxs[-1]
-
-        # Determine what fitting function to use
-        # Make sure last parameter is always the constant y offset
-        def linear(t, m, b):
-            return m*t + b
-        
-        def hyper(t, p0, p1, p2):
-            return p0/(t+p1) + p2
-        
-        func = {'hyper':hyper, 'linear':linear}.get(method)
-        
-        # Do fitting
-        with warnings.catch_warnings():
-            warnings.simplefilter('error')
-            try:
-                popt, pcov = curve_fit(func, t[lb:rb], pc[lb:rb], maxfev=1000)
-            except RuntimeError:
-                # func = linear
-                # popt, pcov = curve_fit(func,t[lb:rb], pc[lb:rb])
-                self.threshold = np.zeros(len(t))
-                return
-        
-        self.threshold = func(t, *popt[:-1], (1-offset)*popt[-1])
-        
-        # Find where smoothed curve crosses threshold line
-        # Go backwards in case there are multiple crossings
-        Ct_idx = 0
-        for i, val in enumerate(pc):
-            # if t[i] > self.normalizeRange[1]:
-            if t[i] > left_ips:
-                # print(self.t[i])
-                if val < self.threshold[i]:
-                    tval = self.threshold[i]
-                    Ct     = t[i]
-                    Ct_idx = i
-                    if Ct < left_ips-5:
-                        print(left_ips)
-                        continue
-                    break
-        
-        # Refine threshold crossing time by linear interpolation
-        if Ct_idx != 0:
-            test_ts = np.linspace(t[Ct_idx-1], t[Ct_idx], 1000)
-            test_ys = np.linspace(pc[Ct_idx-1], pc[Ct_idx], 1000)    
-            nearest_idx = np.abs(test_ys - tval).argmin()
-            nearest_t = test_ts[nearest_idx]
-            self.Ct = nearest_t   
         return
     
     
+    def calc_Ct(self, offset = 0.05, method='hyper'):
+        
+        if not hasattr(self, 'peak_idx'):
+            return
+        
+        t = np.array(self.t)
+        y = np.array(self.smoothed)
+        left_ips = self.peak_props['left_ips']
+        
+        # Determine baseline region
+        idxs, _ = get_range(t, 5, left_ips)
+        if len(idxs) < 5: return
+        lb, rb = idxs[0], idxs[-1]
+        
+        # Fitting functions
+        def linear(t, p0, p1):
+            return p0*t + p1
+        
+        def hyper(t, p0, p1, p2):
+            return p0/(t+p1) + p2
+                
+        # Do fit
+        func = {'hyper':hyper, 'linear':linear}.get(method)
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            try:
+                popt, pcov = curve_fit(func, t[lb:rb], y[lb:rb])
+                self.threshold = func(t, *popt[:-1], (1-offset)*popt[-1])
+            except:
+                # Fit failed, use flat baseline
+                self.threshold = np.ones(len(t)) * (1 - offset) * self.norm_val
+
+        
+        Ct_idx = 0
+        for i, val in enumerate(y):
+            if (t[i] > left_ips - 1 and val < self.threshold[i]):
+                tval = self.threshold[i]
+                Ct_idx = i
+                break
+                
+        # Refine threshold crossing time by linear interpolation
+        if Ct_idx != 0:
+            # Must have crossed to the left of Ct_idx
+            test_ts = np.linspace(t[Ct_idx-1], t[Ct_idx], 100)
+            test_ys = np.linspace(pc[Ct_idx-1], pc[Ct_idx], 100)    
+            nearest_idx = np.abs(test_ys - tval).argmin()
+            self.Ct = test_ts[nearest_idx]
+            
+        return
     
-    def normalize(self, t, pc, mode='mean'):  
-        # Get normalization constant
-        pc = np.array(pc)
-        func = getattr(np, mode)
-        idxs = np.where(
-                    np.logical_and(np.array(t) > self.normalizeRange[0],
-                                   np.array(t) < self.normalizeRange[1])
-                    )[0]
-        norm_val = max(func(pc[min(idxs):max(idxs)]) , 1e-3)
-        self.norm_val = norm_val
-        norm_pc  = pc/norm_val
-        return list(norm_pc)
     
-    def call_result(self, Ct_thresh=25, Sd_thresh=0.10):
+    def evaluate_result(self, Ct_thresh=25, Sd_thresh=0.10):
         
-        Ct = self.Ct
+        if not hasattr(self, 'peak_idx'):
+            return
         
-        # Calculate signal drop
-        # Starting signal = normalized pc at left ips
-        start_idx, start_t = find_nearest(self.t, 
-                                          self.peak_props['left_ips'])
-        # end_idx, end_t = find_nearest(self.t, 
-        #                               self.peak_props['left_ips'] + 5)
+        # Starting signal: normalized current at left ips
+        idx, _ = find_nearest(self.t, self.peak_props['left_ips'])
         
-        start_pc = self.norm_pc[start_idx]
-        end_pc   = self.norm_pc[-1]
-        # end_pc   = self.norm_pc[end_idx]
-        Sd       = start_pc - end_pc
+        self.Sd = self.norm_pc[idx] - self.norm_pc[-1]
+                
+        if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
+            self.result = True
         
-        self.Sd = Sd
-        
-        # print(f'{self.t[-1]:0.2f} Ct: {Ct:0.2f}, Sd: {Sd:0.2f}')
-        
-        if (Ct <= Ct_thresh and Sd >= Sd_thresh):
-            return 1
         else:
-            return 0
+            self.result = False
+        return
+    
+    
+    def make_plot(self):
+        fig, ax = plt.subplots(figsize=(10,10))
+        ax.set_ylim(0, 50)
+        ax.set_xlim(-1.5, 32)
+        self.dataln, = ax.plot([],[], 'o')
+        self.smoothln, = ax.plot([],[], '--', color='k', lw=2)
+        self.derivln, = ax.plot([],[], '--', color='orange', lw=2)
+        self.peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+        self.baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
+        
+        self.update_lines()
+        
+        plt.show()
+        
+            
+        
+        
+        
 
 
+
+
+if __name__ == '__main__':
+    file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
+    
+    from _util import ViewerDataSource
+    from calling_algorithm import removeDuplicates
+    
+    X, y, names, devices = extract_data(file)
+    
+    X = X[10]
+    t, pc = X[0], X[1]
+    
+    datastream = [(t[i], pc[i]) for i in range(1, len(t))]
+    
+    fig, ax = plt.subplots(figsize=(10,10))
+    ax.set_ylim(0, 50)
+    ax.set_xlim(-1.5, 32)
+    dataln, = ax.plot([],[], 'o')
+    smoothln, = ax.plot([],[], '--', color='k', lw=2)
+    derivln, = ax.plot([],[], '--', color='orange', lw=2)
+    peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+    baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
+    
+    rtc = RealTimeCaller(datastream[0][0], datastream[0][1], 
+                         dataln, smoothln, derivln, peakln, baseln)
+    ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
+                            interval=10, blit = True,
+                            frames = datastream[1:], repeat=False)
+
+    plt.show()   
+    
+    # rtc.make_plot()
+        
+        
+        
+        
