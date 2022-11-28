@@ -36,28 +36,31 @@ def find_nearest(array, value):
     return idx, array[idx]
 
 
+
+
 class RealTimeCaller:
     
     def __init__(self, t0, pc0, dataln=None, smoothln=None, 
                  derivln=None, peakln=None, baseln=None, window=11):
         
         # Initialize variables
-        self.i          = 0      # Index
-        self.t          = [t0]   # Time
-        self.pc         = [pc0]  # Peak Current
-        self.dy         = [0]    # 1st derivative
-        self.smoothed   = [pc0]  # Smoothed peak currents
+        self.i          = -1      # Index
+        self.t          = []   # Time
+        self.pc         = []  # Peak Current
+        self.dy         = []    # 1st derivative
+        self.smoothed   = []  # Smoothed peak currents
         
         self.window     = window    # Hanning func smoothing window
         self.normalizeRange = (2,3) # time bounds for normalization
         self.norm_val       = 1     # Normalization constant 
-        self.norm_pc        = [pc0] # Normalized currents
+        self.norm_pc        = [] # Normalized currents
         self.threshold      = [0]   # Threshold line
         
         self.Ct             = 1000
         self.result         = False 
         self.flag           = False # Flag if positive result has been called
         self.call_time      = 0
+        self.call_Sd        = 0
         
         # Line2D objects for real-time plotting
         self.dataln     = dataln
@@ -67,6 +70,8 @@ class RealTimeCaller:
         self.baseln     = baseln
         self.lines = [self.dataln, self.smoothln, self.derivln,
                       self.peakln, self.baseln]
+        
+        self.update(data=(t0, pc0))
         
         
     def update(self, data, plots=False):
@@ -85,9 +90,10 @@ class RealTimeCaller:
         self.evaluate_result()
         
         if (self.result and not self.flag):
-            print(f'Called positive @ t = {t:0.2f} min.')
-            self.flag = True
+            # print(f'Called positive @ t = {t:0.2f} min.')
+            self.flag      = True
             self.call_time = t
+            self.call_Sd   = self.Sd
                 
         if plots:
             self.update_lines()
@@ -112,7 +118,7 @@ class RealTimeCaller:
                                   ])
         
         if len(self.threshold) != 1:
-            self.baseln.set_data(self.t, self.threshold)
+            self.baseln.set_data(self.t, self.norm_val*self.threshold)
         return
     
     
@@ -141,7 +147,7 @@ class RealTimeCaller:
     def normalize(self, mode='mean'):
         i = self.i
         
-        if self.t[i] < self.normalizeRange[1]:
+        if self.t[i] <= self.normalizeRange[1]:
             # Haven't recorded enough data yet
             return
         
@@ -158,8 +164,11 @@ class RealTimeCaller:
                                     self.normalizeRange[1])
         
         pc = np.array(self.pc)
-        self.norm_val = func(pc[idxs])
-        self.norm_pc  = self.smoothed/self.norm_val
+        norm_val = func(pc[idxs])
+        if norm_val == 0:
+            norm_val = 1.0
+        self.norm_val = norm_val
+        self.norm_pc  = np.array(self.smoothed)/self.norm_val
         return self.norm_val
     
         
@@ -220,7 +229,7 @@ class RealTimeCaller:
             return
         
         t = np.array(self.t)
-        y = np.array(self.smoothed)
+        y = np.array(self.norm_pc)
         left_ips = self.peak_props['left_ips']
         
         # Determine baseline region
@@ -244,12 +253,13 @@ class RealTimeCaller:
                 self.threshold = func(t, *popt[:-1], (1-offset)*popt[-1])
             except:
                 # Fit failed, use flat baseline
-                self.threshold = np.ones(len(t)) * (1 - offset) * self.norm_val
+                # self.threshold = np.ones(len(t)) * (1 - offset)
+                self.threshold = np.ones(len(t)) * (1 - offset) * np.mean(y[lb:rb])
 
         
         Ct_idx = 0
         for i, val in enumerate(y):
-            if (t[i] > left_ips - 1 and val < self.threshold[i]):
+            if (t[i] > left_ips and val < self.threshold[i]):
                 tval = self.threshold[i]
                 Ct_idx = i
                 break
@@ -258,14 +268,14 @@ class RealTimeCaller:
         if Ct_idx != 0:
             # Must have crossed to the left of Ct_idx
             test_ts = np.linspace(t[Ct_idx-1], t[Ct_idx], 100)
-            test_ys = np.linspace(pc[Ct_idx-1], pc[Ct_idx], 100)    
+            test_ys = np.linspace(y[Ct_idx-1], y[Ct_idx], 100)    
             nearest_idx = np.abs(test_ys - tval).argmin()
             self.Ct = test_ts[nearest_idx]
             
         return
     
     
-    def evaluate_result(self, Ct_thresh=25, Sd_thresh=0.10):
+    def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
         
         if not hasattr(self, 'peak_idx'):
             return
@@ -277,14 +287,17 @@ class RealTimeCaller:
                 
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
             self.result = True
+            if not self.flag:
+                self.call_Sd = self.Sd
         
         else:
             self.result = False
         return
     
     
-    def make_plot(self):
+    def make_plot(self, title=''):        
         fig, ax = plt.subplots(figsize=(10,10))
+        ax.set_title(title)
         ax.set_ylim(0, 50)
         ax.set_xlim(-1.5, 32)
         self.dataln, = ax.plot([],[], 'o')
@@ -296,10 +309,30 @@ class RealTimeCaller:
         self.update_lines()
         
         plt.show()
+        return fig
         
             
         
+
+class CallerSimulator(RealTimeCaller):
+    
+    def __init__(self, X, y, name, device):
         
+        self.X      = X
+        self.y      = y
+        self.name   = name
+        self.device = device
+        
+        super().__init__(X[0][0], X[1][0])
+        
+    def run(self):
+        
+        ts = self.X[0][1:]
+        pcs = self.X[1][1:]
+        
+        for (t, pc) in zip(ts, pcs):
+            self.update((t,pc))
+            
         
 
 

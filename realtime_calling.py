@@ -7,9 +7,9 @@ from utils.calling_algorithm import (
     removeDuplicates, Pipeline, Smoother, Normalize, Truncate, Derivitive,
     FindPeak, HyperCt, CtPredictor
     )
-from utils.realtime_caller import RealTimeCaller, CallerRunner
+from utils.realtime_caller import RealTimeCaller, CallerSimulator
 from matplotlib.animation import FuncAnimation
-from matplotlib.lines import Line2D
+from functools import partial
 
 
 def extract_data(file):
@@ -39,11 +39,19 @@ def run_with_plot(file, i = 2):
     peakln,  = ax.plot([],[], '-', color='blue', lw=2)
     baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
     
-    rtc = RealTimeCaller(t[0], pc[0], dataln, smoothln, derivln, peakln, baseln)
-    ani     = FuncAnimation(fig, rtc.update_plot, interval=10, blit = True,
-                            frames = datastream, repeat=False)
-
-    plt.show()    
+    rtc = RealTimeCaller(datastream[0][0], datastream[0][1],
+                           dataln, smoothln, derivln, peakln, baseln)
+    ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
+                            interval=10, blit = False,
+                            frames = datastream[1:], repeat=False,
+                            init_func = rtc.update_lines)
+    
+    # ani = CallerSimulator(X, y[i], names[i], devices[i])
+    # ani.run()
+    
+    
+    plt.show()   
+     
     return rtc, ani
 
 
@@ -52,8 +60,8 @@ def run_all(files):
     for file in files:
         X, y, names,devices = extract_data(file)
     
-        for i, (t, pc) in enumerate(X):
-            runner = CallerRunner(t, pc, y[i])
+        for i, _ in enumerate(X):
+            runner = CallerSimulator(X[i], y[i], names[i], devices[i])
             runners.append(runner)
             runner.run()
 
@@ -63,13 +71,13 @@ def run_all(files):
     false_neg = []
     for r in runners:
         
-        if r.res == '+':
+        if r.result: #realtime predicts positive
             if r.y == '+':
                 true_pos.append(r)
             elif r.y == '-':
                 false_pos.append(r)
                 
-        if r.res == '-':
+        if not r.result: # Realtime predicts negative
             if r.y == '+':
                 false_neg.append(r)
             elif r.y == '-':
@@ -122,12 +130,11 @@ class Comparator:
         return prediction
     
     def realtime_algo_call(self):
-        t, pc = self.X
-        self.runner = CallerRunner(t, pc, self.y)
+        self.runner = CallerSimulator(self.X, self.y, self.name, self.device)
         runner = self.runner
-        runner.run(printout=False)
-        prediction = {'res': True if runner.res=='+' else False,
-                      'Ct': runner.call_Ct,
+        runner.run()
+        prediction = {'res': runner.result,
+                      'Ct': runner.call_time,
                       'Pr': 0,
                       'Sd': runner.call_Sd,
                       'call_time': runner.call_time}
@@ -150,16 +157,8 @@ class Comparator:
         
         if (d[(r, s)] == 'False positive' or 
             d[(r, s)] == 'False negative'):
-            rtc = self.runner.rtc
-            fig, ax = plt.subplots()
-            ax.set_title(d[(r, s)] + f'Ct:{rtc.Ct}')
-            ax.plot(rtc.t, rtc.pc, 'o-')
-            ax.plot(rtc.t, rtc.threshold, 'k--')
-            ax.plot(rtc.t[-len(rtc.dy)+15:], 5+np.mean(rtc.threshold)*rtc.dy[15:], '--')
-            ax.plot([rtc.peak_time, rtc.peak_time], 
-                    [5+np.mean(rtc.threshold)*rtc.dy[rtc.peak_idx], 
-                     3+np.mean(rtc.threshold)*rtc.dy[rtc.peak_idx]], 'bo-')
-            ax.axvline(rtc.peak_props['left_ips'])
+            rtc = self.runner
+            rtc.make_plot(title=d[(r, s)])
         
         return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
 
@@ -169,19 +168,19 @@ class Comparator:
 if __name__ == '__main__':
     file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
 
-    files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
+    # files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
     # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
     # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
     # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
     # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
     # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"
-    ]
+    # ]
     
     # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
     
     
     
-    # rtc, ani = run_with_plot(file, 10)
+    # rtc, ani = run_with_plot(file, 2)
     
     folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
     import os
@@ -191,47 +190,34 @@ if __name__ == '__main__':
           'True negative': [],
           'False positive': [],
           'False negative': []}
-    
+    bads = []
     for file in os.listdir(folder):
         if file.endswith('.picklez'):
             f = os.path.join(folder, file)
             data = extract_data(f)
             
             data_list = [l for l in zip(*data)]
-            for (X, y, name, device) in data_list:
+            for i, (X, y, name, device) in enumerate(data_list):
                 comp = Comparator(X, y, name, device)
                 rt_res, st_red, res, call_time = comp.compare()
                 
                 d[res].append((file, name, device, call_time))
-                # print(f'{res}     {file}')
+                print(f'{res}     {file}')
                 if res == 'False negative':
-                    print(f'false negative {file}')
+                    bads.append((f, i))
+                #     print(f'false negative {file}')
                 if res == 'False positive':
-                    print(f'false positive {file}')
+                    bads.append((f, i))
+                #     print(f'false positive {file}')
                 
                 i += 1
             
-            # if i > 150:
+            # if i > 100:
             #     break
                 
     for key, l in d.items():
         print(f'{key}: {len(l)}')
                 
-    
-    # file = os.path.join(folder, '20221114 45% and 100% heating.picklez')
-    # file = os.path.join(folder, '20221110 R23=390Ohm.picklez')
-    # file = os.path.join(folder, '20221121 batch 5.picklez')
-    
-    # rtc, ani = run_with_plot(file, 7)
-    
-    # data = extract_data(file)
-    # data_list = [l for l in zip(*data)]
-    # # data_list = [data_list[2]]
-    # for (X, y, name, device) in data_list:
-    #     comp = Comparator(X, y, name, device)
-    #     rt_res, st_res, res, call_time = comp.compare()
-    #     print(rt_res, st_res)
-    
     
     
     
