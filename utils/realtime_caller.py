@@ -222,11 +222,15 @@ class RealTimeCaller:
         
         return
     
-    
-    def calc_Ct(self, offset = 0.05, method='hyper'):
-        
+    def calc_Ct(self, offset=0.05, method='hyper'):
         if not hasattr(self, 'peak_idx'):
             return
+        if (method == 'hyper' or method == 'linear'):
+            self._calc_Ct(offset, method)
+        elif (method == 'baseline'):
+            self._calc_Ct_from_bline(offset, method)
+    
+    def _calc_Ct(self, offset = 0.05, method='hyper'):
         
         t = np.array(self.t)
         y = np.array(self.norm_pc)
@@ -275,6 +279,54 @@ class RealTimeCaller:
         return
     
     
+    def _calc_Ct_from_bline(self, offset=0.05, method='baseline'):
+
+        t = np.array(self.t)
+        y = np.array(self.norm_pc)
+        left_ips = self.peak_props['left_ips']
+        
+        # Determine baseline region
+        idxs, _ = get_range(t, 1, left_ips)
+        if len(idxs) < 5: return
+        lb, rb = idxs[0], idxs[-1]
+        
+        # Find flattest 3-minute baseline
+        def linear(t, m, b):
+            return m*t + b
+        
+        if len(idxs) < 8:
+            best, _ = curve_fit(linear, t[lb:rb], y[lb:rb])
+        
+        elif len(idxs) >= 8:
+            best = [1e10, 1e10]
+            lims = [(lb + i, lb + i + 8) for i in range(len(idxs)-8)]
+            
+            for (a, b) in lims:
+                popt, pcov = curve_fit(linear, t[a:b], y[a:b])
+                if abs(popt[0]) < abs(best[0]):
+                    best = popt
+        
+        self.threshold = linear(t, *best)
+        
+        Ct_idx = 0
+        for i, val in enumerate(y):
+            if (t[i] > left_ips and val < self.threshold[i]):
+                tval = self.threshold[i]
+                Ct_idx = i
+                break
+                
+        # Refine threshold crossing time by linear interpolation
+        if Ct_idx != 0:
+            # Must have crossed to the left of Ct_idx
+            test_ts = np.linspace(t[Ct_idx-1], t[Ct_idx], 100)
+            test_ys = np.linspace(y[Ct_idx-1], y[Ct_idx], 100)    
+            nearest_idx = np.abs(test_ys - tval).argmin()
+            self.Ct = test_ts[nearest_idx]
+            
+        return
+        
+    
+    
     def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
         
         if not hasattr(self, 'peak_idx'):
@@ -284,11 +336,12 @@ class RealTimeCaller:
         idx, _ = find_nearest(self.t, self.peak_props['left_ips'])
         
         self.Sd = self.norm_pc[idx] - self.norm_pc[-1]
-                
+        # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
             self.result = True
             if not self.flag:
                 self.call_Sd = self.Sd
+                # print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         
         else:
             self.result = False

@@ -163,26 +163,7 @@ class Comparator:
         return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
 
 
-
-
-if __name__ == '__main__':
-    file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
-
-    # files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"
-    # ]
-    
-    # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
-    
-    
-    
-    # rtc, ani = run_with_plot(file, 2)
-    
-    folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
+def compare_all(folder, n=20000):
     import os
     
     i = 0 # count total number of sensors evaluated
@@ -212,11 +193,35 @@ if __name__ == '__main__':
                 
                 i += 1
             
-            # if i > 100:
-            #     break
+            if i > n:
+                break
                 
     for key, l in d.items():
         print(f'{key}: {len(l)}')
+        
+    return d, bads, comp
+
+
+if __name__ == '__main__':
+    file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
+
+    # files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
+    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"
+    # ]
+    
+    # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
+    
+    
+    
+    # rtc, ani = run_with_plot(file, 1)
+    
+    # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
+    # d, bads, comp = compare_all(folder, n=100)
+    
                 
     
     
