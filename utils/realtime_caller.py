@@ -119,7 +119,7 @@ class RealTimeCaller:
         
         if len(self.threshold) != 1:
             self.baseln.set_data(self.t, self.norm_val*self.threshold)
-        return
+        return *self.lines,
     
     
     def smooth(self):
@@ -341,7 +341,7 @@ class RealTimeCaller:
             self.result = True
             if not self.flag:
                 self.call_Sd = self.Sd
-                # print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+                print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         
         else:
             self.result = False
@@ -364,8 +364,214 @@ class RealTimeCaller:
         plt.show()
         return fig
         
+  
+
+class RealTimeSDAvg:
+    def __init__(self, t0, pc0, dataln=None, avgln=None, 
+                 threshln = None, window=11):
+        
+        # Initialize variables
+        self.i          = -1      # Index
+        self.t          = []   # Time
+        self.y          = []   # Peak Current
+        self.signals    = []
+        self.filtY      = []
+        self.avgFilter  = []
+        self.stdFilter  = []
+        self.threshold  = [0]
+        
+        self.lag        = 15
+        # self.threshold  = 2
+        self.influence  = 0.8
+        
+        self.window     = window    # Hanning func smoothing window
+        self.normalizeRange = (2,3) # time bounds for normalization
+        self.norm_val       = 1     # Normalization constant 
+        self.norm_pc        = []    # Normalized currents
+        
+        self.Ct             = 1000
+        self.result         = False 
+        self.flag           = False # Flag if positive result has been called
+        self.crossed        = False # If dy has crossed the rolling threshold
+        self.call_time      = 0
+        self.call_Sd        = 0
+        
+        # Line2D objects for real-time plotting
+        self.dataln     = dataln
+        self.avgln      = avgln
+        self.threshln   = threshln
+        self.lines = [self.dataln, self.avgln, self.threshln]
+        
+        self.update(data=(t0, pc0))
+        
+        
+    def update(self, data, plots=True):
+        
+        t, pc = data
+        
+        self.i += 1
+        self.t.append(t)    
+        self.y.append(pc)
+        
+        self.smooth()
+        self.calc_dy()
+        
+        self.check_crossing()
+        
+        if self.crossed:
+            self.evaluate_result()
+        
+        self.thresholding_algo()
+        self.evaluate_result()
+        
+        # if (self.result and not self.flag):
+        #     # print(f'Called positive @ t = {t:0.2f} min.')
+        #     self.flag      = True
+        #     self.call_time = t
+        #     self.call_Sd   = self.Sd
+                
+        if plots:
+            self.update_lines()
+            return *self.lines,
+        
+        # else:
+        #     return self.result
+    
+    
+    def update_lines(self):
+        # Update plot if doing realtime plotting
+        self.dataln.set_data(self.t, self.y)
+        self.avgln.set_data(self.t, np.array(self.dy))
+        self.threshln.set_data(self.t, np.array(self.threshold[:-1]))
+       
+        return *self.lines, 
+    
+    
+    def smooth(self):
+        # Smooth raw peak current data using Hanning window
+        if len(self.t) <= self.window:
+            self.filtY.append(self.y[-1])
+            return self.filtY
+        
+        w = np.hanning(self.window)
+        w = w/w.sum()
+        
+        # Somehow applies window over array...
+        x = self.y
+        s = np.r_[x[self.window-1:0:-1],
+                  x,
+                  x[-2:-self.window-1:-1]
+                  ]
+        arr = np.convolve(w, s, mode='valid')
+        arr = arr[self.window//2 : -(self.window//2)]
+        
+        self.filtY = arr
+        return self.filtY
+    
+    
+    def calc_dy(self):
+        
+        if len(self.filtY) <= 1:
+            self.dy = self.filtY
+        
+        else:
+            self.dy = [self.filtY[i] - self.filtY[i-1] for
+                       i in range(1, len(self.filtY))]
+            self.dy = [self.dy[0]] + self.dy # Copy first value
+            self.dy = -20*np.array(self.dy)
+            self.dy = self.dy.tolist()
+        
+        self.dy = self.filtY
+        
+        return self.dy
+    
+    
+    def check_crossing(self):
+        # Check if the newest point crossed the threshold
+        i = len(self.dy) - 1
+        
+        if i < (self.window + 5):
+            return
+        
+        if (self.dy[i] < self.threshold[i]):
+            if not self.crossed:
+                self.crossed = True
+    
+    
+    
+    def thresholding_algo(self, factor=5, n=7):
+        
+        self.threshold += [0]
+        i = len(self.dy) - 1
+        
+        if i <= self.window:
+            return
+        
+        # Get slope of last n points
+        idxs = np.arange(i-n, i+1)
+        ddys  = [self.dy[j] - self.dy[j-1] for j in idxs]
+        slope = np.mean(ddys)
+        
+        # Calculate threshold of next point
+        next_limit = self.dy[i] + slope*factor
+        self.threshold[i+1] = next_limit
+    
+        return
+    
+    
+    def find_Ct(self):
+        
+        try:
+            idx = np.where(self.dy == np.max(self.dy))[0][0]
+            return idx, self.t[idx]
+        except:
+            return None, None
+        # crossings = []
+        # above = False
+        # for i, _ in enumerate(self.dy):
+        #     if (self.dy[i] <= self.threshold[i]) and not above:
+        #         continue
+        #     elif (self.dy[i] > self.threshold[i] and 
+        #           self.threshold[i] > 0) and not above:
+        #         above = True
+        #         crossings.append(i)
+        #     elif (self.dy[i] > self.threshold[i]) and above:
+        #         continue
+        #     elif (self.dy[i] <= self.threshold[i]) and above:
+        #         above = False
+        
+        # if len(crossings) == 0:
+        #     return None, None
+        
+        # idx = max(crossings)
+        # Ct = self.t[idx]
+        # return idx, Ct
             
         
+    def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
+                
+        idx, self.Ct = self.find_Ct()
+        if not idx:
+            return
+        
+        self.Sd = (self.y[idx] - self.y[-1])/self.y[idx]
+        # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
+        if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
+            self.result = True
+            if not self.flag:
+                self.flag = True
+                self.call_Sd = self.Sd
+                print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+        else:
+            self.result = False
+            
+        # print(f't={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+
+        return
+        
+
+
+
 
 class CallerSimulator(RealTimeCaller):
     
@@ -407,14 +613,25 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(figsize=(10,10))
     ax.set_ylim(0, 50)
     ax.set_xlim(-1.5, 32)
-    dataln, = ax.plot([],[], 'o')
-    smoothln, = ax.plot([],[], '--', color='k', lw=2)
-    derivln, = ax.plot([],[], '--', color='orange', lw=2)
-    peakln,  = ax.plot([],[], '-', color='blue', lw=2)
-    baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
+    # dataln, = ax.plot([],[], 'o')
+    # smoothln, = ax.plot([],[], '--', color='k', lw=2)
+    # derivln, = ax.plot([],[], '--', color='orange', lw=2)
+    # peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+    # baseln,  = ax.plot([], [], '--', color='k', lw=1.5)    
     
-    rtc = RealTimeCaller(datastream[0][0], datastream[0][1], 
-                         dataln, smoothln, derivln, peakln, baseln)
+    # rtc = RealTimeCaller(datastream[0][0], datastream[0][1], 
+    #                      dataln, smoothln, derivln, peakln, baseln)
+    
+    
+    dataln, = ax.plot([], [], 'o')
+    avgln, = ax.plot([], [], '--', color='k', lw=2)
+    stdln1, = ax.plot([], [], '--', color='orange', lw=1.2)
+    stdln2, = ax.plot([], [], '--', color='orange', lw=1.2)
+    
+    rtc = RealTimeSDAvg(datastream[0][0], datastream[0][1],
+                        dataln, avgln, stdln1, stdln2)
+    
+    
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
                             interval=10, blit = True,
                             frames = datastream[1:], repeat=False)

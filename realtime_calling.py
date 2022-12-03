@@ -7,7 +7,7 @@ from utils.calling_algorithm import (
     removeDuplicates, Pipeline, Smoother, Normalize, Truncate, Derivitive,
     FindPeak, HyperCt, CtPredictor
     )
-from utils.realtime_caller import RealTimeCaller, CallerSimulator
+from utils.realtime_caller import RealTimeCaller, CallerSimulator, RealTimeSDAvg
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
@@ -16,13 +16,14 @@ def extract_data(file):
     dataSource = ViewerDataSource()
     pickleFiles = [file]
     dataSource.load_picklefiles(pickleFiles)
+    # return dataSource
 
 
     X, y, names,devices = removeDuplicates(*dataSource.exportXy())
     return X, y, names, devices
 
 
-def run_with_plot(file, i = 2):  
+def run_with_plot(file, i = 17):  
     X, y, names, devices = extract_data(file)
     
     X = X[i]
@@ -31,18 +32,27 @@ def run_with_plot(file, i = 2):
     datastream = [(t[i], pc[i]) for i in range(0, len(t))]
             
     fig, ax = plt.subplots(figsize=(10,10))
-    ax.set_ylim(0, 50)
+    ax.set_ylim(0,50)
     ax.set_xlim(-1.5, 32)
-    dataln, = ax.plot([],[], 'o')
-    smoothln, = ax.plot([],[], '--', color='k', lw=2)
-    derivln, = ax.plot([],[], '--', color='orange', lw=2)
-    peakln,  = ax.plot([],[], '-', color='blue', lw=2)
-    baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
+    # dataln, = ax.plot([],[], 'o')
+    # smoothln, = ax.plot([],[], '--', color='k', lw=2)
+    # derivln, = ax.plot([],[], '--', color='orange', lw=2)
+    # peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+    # baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
     
-    rtc = RealTimeCaller(datastream[0][0], datastream[0][1],
-                           dataln, smoothln, derivln, peakln, baseln)
+    # rtc = RealTimeCaller(datastream[0][0], datastream[0][1],
+    #                         dataln, smoothln, derivln, peakln, baseln)
+    
+    dataln, = ax.plot([], [], 'o')
+    avgln, = ax.plot([], [], '--', color='k', lw=2)
+    threshln, = ax.plot([], [], '--', color='orange', lw=1.2)
+    
+    rtc = RealTimeSDAvg(datastream[0][0], datastream[0][1],
+                        dataln, avgln, threshln)
+    
+    
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
-                            interval=10, blit = False,
+                            interval=50, blit = True,
                             frames = datastream[1:], repeat=False,
                             init_func = rtc.update_lines)
     
@@ -215,9 +225,18 @@ if __name__ == '__main__':
     
     # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
     
+    # ds = extract_data(file)
+    # out_folder = r'C:\Users\Elmer Guzman\Desktop\simdata\C4'
+    # import os
+    # for i, (V, I) in enumerate(ds.rawView['data'][3]['data']['rawdata']):
+    #     file = os.path.join(out_folder, f'{i}.csv')
+    #     l = zip(V, I)
+    #     with open(file, 'a') as f:
+    #         for (V, I) in l:
+    #             f.write(f'{V},{I}\n')
+            
     
-    
-    # rtc, ani = run_with_plot(file, 1)
+    rtc, ani = run_with_plot(file)
     
     # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
     # d, bads, comp = compare_all(folder, n=100)
