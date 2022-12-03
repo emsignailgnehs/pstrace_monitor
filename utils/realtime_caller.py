@@ -422,7 +422,7 @@ class RealTimeSDAvg:
             self.evaluate_result()
         
         self.thresholding_algo()
-        self.evaluate_result()
+        # self.evaluate_result()
         
         # if (self.result and not self.flag):
         #     # print(f'Called positive @ t = {t:0.2f} min.')
@@ -442,7 +442,8 @@ class RealTimeSDAvg:
         # Update plot if doing realtime plotting
         self.dataln.set_data(self.t, self.y)
         self.avgln.set_data(self.t, np.array(self.dy))
-        self.threshln.set_data(self.t, np.array(self.threshold[:-1]))
+        if len(self.threshold) > 5:
+            self.threshln.set_data(self.t, np.array(self.threshold))
        
         return *self.lines, 
     
@@ -488,64 +489,39 @@ class RealTimeSDAvg:
     
     def check_crossing(self):
         # Check if the newest point crossed the threshold
-        i = len(self.dy) - 1
+        return
+    
+    
+    
+    def thresholding_algo(self, factor=5, n=10, lag=7):
         
-        if i < (self.window + 5):
+        # Do linear fit on n points, 
+        # Check if this point is significantly below this baseline
+        # if so, positive
+        
+        def linear(t, m, b):
+            return m*t + b
+        
+        i = len(self.y) - 1
+
+        idxs = np.arange(i-n-lag, i-lag).astype(int)
+        lb, rb = min(idxs), max(idxs)
+        
+        if lb < 10:
             return
-        
-        if (self.dy[i] < self.threshold[i]):
-            if not self.crossed:
-                self.crossed = True
-    
-    
-    
-    def thresholding_algo(self, factor=5, n=7):
-        
-        self.threshold += [0]
-        i = len(self.dy) - 1
-        
-        if i <= self.window:
-            return
-        
-        # Get slope of last n points
-        idxs = np.arange(i-n, i+1)
-        ddys  = [self.dy[j] - self.dy[j-1] for j in idxs]
-        slope = np.mean(ddys)
-        
-        # Calculate threshold of next point
-        next_limit = self.dy[i] + slope*factor
-        self.threshold[i+1] = next_limit
+
+        # linear fit
+        popt = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
+        self.threshold = linear(np.array(self.t), *popt)
+        if self.y[i] < 0.95*self.threshold[i]:
+            print('positive')
     
         return
     
     
     def find_Ct(self):
         
-        try:
-            idx = np.where(self.dy == np.max(self.dy))[0][0]
-            return idx, self.t[idx]
-        except:
-            return None, None
-        # crossings = []
-        # above = False
-        # for i, _ in enumerate(self.dy):
-        #     if (self.dy[i] <= self.threshold[i]) and not above:
-        #         continue
-        #     elif (self.dy[i] > self.threshold[i] and 
-        #           self.threshold[i] > 0) and not above:
-        #         above = True
-        #         crossings.append(i)
-        #     elif (self.dy[i] > self.threshold[i]) and above:
-        #         continue
-        #     elif (self.dy[i] <= self.threshold[i]) and above:
-        #         above = False
-        
-        # if len(crossings) == 0:
-        #     return None, None
-        
-        # idx = max(crossings)
-        # Ct = self.t[idx]
-        # return idx, Ct
+        return
             
         
     def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):

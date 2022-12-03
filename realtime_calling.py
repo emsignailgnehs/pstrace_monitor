@@ -23,7 +23,7 @@ def extract_data(file):
     return X, y, names, devices
 
 
-def run_with_plot(file, i = 17):  
+def run_with_plot(file, i = 0):  
     X, y, names, devices = extract_data(file)
     
     X = X[i]
