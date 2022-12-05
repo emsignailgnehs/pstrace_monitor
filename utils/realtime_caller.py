@@ -366,9 +366,9 @@ class RealTimeCaller:
         
   
 
-class RealTimeSDAvg:
+class RealTimeLinear:
     def __init__(self, t0, pc0, dataln=None, avgln=None, 
-                 threshln = None, window=11):
+                 threshln = None, window=11, plots=False):
         
         # Initialize variables
         self.i          = -1      # Index
@@ -383,6 +383,10 @@ class RealTimeSDAvg:
         self.lag        = 15
         # self.threshold  = 2
         self.influence  = 0.8
+        
+        self.offset = 0.05
+        self.m = None
+        self.b = None
         
         self.window     = window    # Hanning func smoothing window
         self.normalizeRange = (2,3) # time bounds for normalization
@@ -402,33 +406,32 @@ class RealTimeSDAvg:
         self.threshln   = threshln
         self.lines = [self.dataln, self.avgln, self.threshln]
         
-        self.update(data=(t0, pc0))
+        self.update(data=(t0, pc0), plots=plots)
         
         
-    def update(self, data, plots=True):
+    def update(self, data, plots=False):
         
         t, pc = data
-        
         self.i += 1
         self.t.append(t)    
         self.y.append(pc)
         
-        self.smooth()
-        self.calc_dy()
+        # self.smooth()
+        # self.calc_dy()
         
-        self.check_crossing()
+        # self.check_crossing()
         
-        if self.crossed:
-            self.evaluate_result()
+        # if self.crossed:
+        #     self.evaluate_result()
         
         self.thresholding_algo()
-        # self.evaluate_result()
+        self.evaluate_result()
         
-        # if (self.result and not self.flag):
-        #     # print(f'Called positive @ t = {t:0.2f} min.')
-        #     self.flag      = True
-        #     self.call_time = t
-        #     self.call_Sd   = self.Sd
+        if (self.result and not self.flag):
+            # print(f'Called positive @ t = {t:0.2f} min.')
+            self.flag      = True
+            self.call_time = t
+            self.call_Sd   = self.Sd
                 
         if plots:
             self.update_lines()
@@ -441,95 +444,132 @@ class RealTimeSDAvg:
     def update_lines(self):
         # Update plot if doing realtime plotting
         self.dataln.set_data(self.t, self.y)
-        self.avgln.set_data(self.t, np.array(self.dy))
+        # self.avgln.set_data(self.t, np.array(self.dy))
         if len(self.threshold) > 5:
             self.threshln.set_data(self.t, np.array(self.threshold))
        
         return *self.lines, 
     
     
-    def smooth(self):
-        # Smooth raw peak current data using Hanning window
-        if len(self.t) <= self.window:
-            self.filtY.append(self.y[-1])
-            return self.filtY
+    # def smooth(self):
+    #     # Smooth raw peak current data using Hanning window
+    #     if len(self.t) <= self.window:
+    #         self.filtY.append(self.y[-1])
+    #         return self.filtY
         
-        w = np.hanning(self.window)
-        w = w/w.sum()
+    #     w = np.hanning(self.window)
+    #     w = w/w.sum()
         
-        # Somehow applies window over array...
-        x = self.y
-        s = np.r_[x[self.window-1:0:-1],
-                  x,
-                  x[-2:-self.window-1:-1]
-                  ]
-        arr = np.convolve(w, s, mode='valid')
-        arr = arr[self.window//2 : -(self.window//2)]
+    #     # Somehow applies window over array...
+    #     x = self.y
+    #     s = np.r_[x[self.window-1:0:-1],
+    #               x,
+    #               x[-2:-self.window-1:-1]
+    #               ]
+    #     arr = np.convolve(w, s, mode='valid')
+    #     arr = arr[self.window//2 : -(self.window//2)]
         
-        self.filtY = arr
-        return self.filtY
+    #     self.filtY = arr
+    #     return self.filtY
     
     
-    def calc_dy(self):
+    # def calc_dy(self):
         
-        if len(self.filtY) <= 1:
-            self.dy = self.filtY
+    #     if len(self.filtY) <= 1:
+    #         self.dy = self.filtY
         
-        else:
-            self.dy = [self.filtY[i] - self.filtY[i-1] for
-                       i in range(1, len(self.filtY))]
-            self.dy = [self.dy[0]] + self.dy # Copy first value
-            self.dy = -20*np.array(self.dy)
-            self.dy = self.dy.tolist()
+    #     else:
+    #         self.dy = [self.filtY[i] - self.filtY[i-1] for
+    #                    i in range(1, len(self.filtY))]
+    #         self.dy = [self.dy[0]] + self.dy # Copy first value
+    #         self.dy = -20*np.array(self.dy)
+    #         self.dy = self.dy.tolist()
         
-        self.dy = self.filtY
+    #     self.dy = self.filtY
         
-        return self.dy
+    #     return self.dy
     
+
     
-    def check_crossing(self):
-        # Check if the newest point crossed the threshold
-        return
-    
-    
-    
-    def thresholding_algo(self, factor=5, n=10, lag=7):
+    def thresholding_algo(self, n=10, lag=7):
         
         # Do linear fit on n points, 
         # Check if this point is significantly below this baseline
         # if so, positive
         
-        def linear(t, m, b):
-            return m*t + b
+        # def linear(t, m, b):
+        #     return m*t + b
         
-        i = len(self.y) - 1
+        # i = len(self.y) - 1
 
-        idxs = np.arange(i-n-lag, i-lag).astype(int)
+        # idxs = np.arange(i-n-lag, i-lag).astype(int)
+        # lb, rb = min(idxs), max(idxs)
+        
+        # if lb < 5:
+        #     return
+
+        # # linear fit
+        # popt = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
+        # self.threshold = linear(np.array(self.t), *popt)
+        # if self.y[i] < 0.95*self.threshold[i]:
+        #     print('positive')
+        
+        
+        ### Find flattest n-point baseline ###
+        i = len(self.y) - 1
+        if i <= n:
+            return
+        
+        idxs = np.arange(i-n, i).astype(int)
         lb, rb = min(idxs), max(idxs)
         
-        if lb < 10:
-            return
-
         # linear fit
-        popt = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
-        self.threshold = linear(np.array(self.t), *popt)
-        if self.y[i] < 0.95*self.threshold[i]:
-            print('positive')
-    
-        return
-    
-    
-    def find_Ct(self):
+        # m, b = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
         
+        # Approximate linear fit
+        m = np.mean([self.y[j] - self.y[j-1] for j in idxs])
+        m /= np.mean([self.t[j] - self.t[j-1] for j in idxs])
+        b = np.mean([self.y[j] - m*self.t[j] for j in idxs])
+        
+        
+        
+        if (self.m is None or abs(m) < abs(self.m)):
+            self.m = m
+            self.b = b
+ 
+        self.threshold = self.m * np.array(self.t) + self.b
+        
+        if self.y[i] < (1-self.offset)*self.threshold[i]:
+            if not self.crossed:
+                self.left_ips = i
+                self.crossed = True
+    
         return
+    
+    
+    def calc_Ct(self):
+        
+        for i in range(len(self.y)):
+            if i >= self.left_ips:
+                if (self.y[i] <= (1-self.offset)*self.threshold[i]):
+                    return i, self.t[i]
             
-        
-    def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
+        return None, None
+    
+    
+
+    def evaluate_result(self, Ct_thresh=25, Sd_thresh=0.10):
                 
-        idx, self.Ct = self.find_Ct()
+        
+        if not self.crossed:
+            return
+        
+        idx, self.Ct = self.calc_Ct()
         if not idx:
             return
         
+        # idx, _ = find_nearest(self.t, self.left_ips)
+        # self.Ct = self.left_ips
         self.Sd = (self.y[idx] - self.y[-1])/self.y[idx]
         # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
@@ -541,8 +581,7 @@ class RealTimeSDAvg:
         else:
             self.result = False
             
-        # print(f't={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
-
+        # print(f't={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}'
         return
         
 

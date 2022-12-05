@@ -7,7 +7,7 @@ from utils.calling_algorithm import (
     removeDuplicates, Pipeline, Smoother, Normalize, Truncate, Derivitive,
     FindPeak, HyperCt, CtPredictor
     )
-from utils.realtime_caller import RealTimeCaller, CallerSimulator, RealTimeSDAvg
+from utils.realtime_caller import RealTimeCaller, CallerSimulator, RealTimeLinear
 from matplotlib.animation import FuncAnimation
 from functools import partial
 
@@ -23,7 +23,7 @@ def extract_data(file):
     return X, y, names, devices
 
 
-def run_with_plot(file, i = 0):  
+def run_with_plot(file, i = 2):  
     X, y, names, devices = extract_data(file)
     
     X = X[i]
@@ -34,6 +34,7 @@ def run_with_plot(file, i = 0):
     fig, ax = plt.subplots(figsize=(10,10))
     ax.set_ylim(0,50)
     ax.set_xlim(-1.5, 32)
+    
     # dataln, = ax.plot([],[], 'o')
     # smoothln, = ax.plot([],[], '--', color='k', lw=2)
     # derivln, = ax.plot([],[], '--', color='orange', lw=2)
@@ -47,7 +48,7 @@ def run_with_plot(file, i = 0):
     avgln, = ax.plot([], [], '--', color='k', lw=2)
     threshln, = ax.plot([], [], '--', color='orange', lw=1.2)
     
-    rtc = RealTimeSDAvg(datastream[0][0], datastream[0][1],
+    rtc = RealTimeLinear(datastream[0][0], datastream[0][1],
                         dataln, avgln, threshln)
     
     
@@ -168,7 +169,7 @@ class Comparator:
         if (d[(r, s)] == 'False positive' or 
             d[(r, s)] == 'False negative'):
             rtc = self.runner
-            rtc.make_plot(title=d[(r, s)])
+            # rtc.make_plot(title=d[(r, s)])
         
         return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
 
@@ -195,10 +196,10 @@ def compare_all(folder, n=20000):
                 d[res].append((file, name, device, call_time))
                 print(f'{res}     {file}')
                 if res == 'False negative':
-                    bads.append((f, i))
+                    bads.append((f, i, comp))
                 #     print(f'false negative {file}')
                 if res == 'False positive':
-                    bads.append((f, i))
+                    bads.append((f, i, comp))
                 #     print(f'false positive {file}')
                 
                 i += 1
@@ -239,7 +240,7 @@ if __name__ == '__main__':
     rtc, ani = run_with_plot(file)
     
     # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
-    # d, bads, comp = compare_all(folder, n=100)
+    # d, bads, comp = compare_all(folder)
     
                 
     
