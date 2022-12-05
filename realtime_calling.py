@@ -55,7 +55,7 @@ def run_with_plot(file, i = 13):
     
     
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
-                            interval=50, blit = True,
+                            interval=10, blit = True,
                             frames = datastream[1:], repeat=False,
                             init_func = rtc.update_lines)
     
@@ -172,7 +172,7 @@ class Comparator:
         if (d[(r, s)] == 'False positive' or 
             d[(r, s)] == 'False negative'):
             rtc = self.runner
-            rtc.make_plot(title=d[(r, s)])
+            # rtc.make_plot(title=d[(r, s)])
         
         return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
 
@@ -198,13 +198,24 @@ def compare_all(folder, n=20000):
                 rt_res, st_red, res, call_time = comp.compare()
                 
                 d[res].append((file, name, device, call_time))
-                print(f'{res}     {file}')
+                # print(f'{res}     {file}')
                 if res == 'False negative':
                     bads.append((f, i, comp))
-                #     print(f'false negative {file}')
+                    print('')
+                    print(f'false negative {file}')
+                    call, sd, ct =  (comp.runner.call_time, 
+                                     comp.runner.Sd, 
+                                     comp.runner.Ct)
+                    print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
                 if res == 'False positive':
                     bads.append((f, i, comp))
-                #     print(f'false positive {file}')
+                    print('')
+                    print(f'false positive {file}')
+                    call, sd, ct =  (comp.runner.call_time, 
+                                     comp.runner.Sd, 
+                                     comp.runner.Ct)
+                    print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
+            
                 
                 i += 1
             

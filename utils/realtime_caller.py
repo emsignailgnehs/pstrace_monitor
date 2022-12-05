@@ -371,29 +371,19 @@ class RealTimeLinear:
                  threshln = None, window=11, plots=False):
         
         # Initialize variables
-        self.i          = -1      # Index
+        self.i          = -1   # Index
         self.t          = []   # Time
-        self.y          = []   # Peak Current
-        self.signals    = []
-        self.filtY      = []
-        self.avgFilter  = []
-        self.stdFilter  = []
-        self.threshold  = [0]
-        
-        self.lag        = 15
-        # self.threshold  = 2
-        self.influence  = 0.8
-        
+        self.y          = []   # Normalized peak current
+        self.threshold  = []   # Calling threshold line
+        self.norm_val   = 1    # Normalization constant 
         self.offset = 0.05
-        self.m = None
-        self.b = None
-        self.R2 = 0
         
-        self.window     = window    # Hanning func smoothing window
-        self.normalizeRange = (2,3) # time bounds for normalization
-        self.norm_val       = 1     # Normalization constant 
-        self.norm_pc        = []    # Normalized currents
+        # Threshold line fit parameters
+        self.m      = None
+        self.b      = None
+        self.R2     = 0
         
+        # Result fields and flags
         self.Ct             = 1000
         self.result         = False 
         self.flag           = False # Flag if positive result has been called
@@ -419,14 +409,6 @@ class RealTimeLinear:
         self.t.append(t)    
         self.y.append(pc/self.norm_val)
         
-        # self.smooth()
-        # self.calc_dy()
-        
-        # self.check_crossing()
-        
-        # if self.crossed:
-        #     self.evaluate_result()
-        
         self.thresholding_algo()
         self.evaluate_result()
         
@@ -440,61 +422,21 @@ class RealTimeLinear:
             self.update_lines()
             return *self.lines,
         
-        # else:
-        #     return self.result
+        else:
+            return self.result
     
     
     def update_lines(self):
         # Update plot if doing realtime plotting
         self.dataln.set_data(self.t, self.y)
-        # self.avgln.set_data(self.t, np.array(self.dy))
         if len(self.threshold) > 5:
             self.threshln.set_data(self.t, np.array(self.threshold))
        
         return *self.lines, 
-    
-    
-    # def smooth(self):
-    #     # Smooth raw peak current data using Hanning window
-    #     if len(self.t) <= self.window:
-    #         self.filtY.append(self.y[-1])
-    #         return self.filtY
         
-    #     w = np.hanning(self.window)
-    #     w = w/w.sum()
-        
-    #     # Somehow applies window over array...
-    #     x = self.y
-    #     s = np.r_[x[self.window-1:0:-1],
-    #               x,
-    #               x[-2:-self.window-1:-1]
-    #               ]
-    #     arr = np.convolve(w, s, mode='valid')
-    #     arr = arr[self.window//2 : -(self.window//2)]
-        
-    #     self.filtY = arr
-    #     return self.filtY
-    
-    
-    # def calc_dy(self):
-        
-    #     if len(self.filtY) <= 1:
-    #         self.dy = self.filtY
-        
-    #     else:
-    #         self.dy = [self.filtY[i] - self.filtY[i-1] for
-    #                    i in range(1, len(self.filtY))]
-    #         self.dy = [self.dy[0]] + self.dy # Copy first value
-    #         self.dy = -20*np.array(self.dy)
-    #         self.dy = self.dy.tolist()
-        
-    #     self.dy = self.filtY
-        
-    #     return self.dy
-    
 
     
-    def thresholding_algo(self, n=10, lag=7):
+    def thresholding_algo(self, n=10):
 
         ### Find flattest n-point baseline ###
         
@@ -508,28 +450,25 @@ class RealTimeLinear:
         if i <= n:
             return
         
+        # Approximate linear fit
         idxs = np.arange(i-n, i).astype(int)
         lb, rb = min(idxs), max(idxs)
         
-        # linear fit
-        # m, b = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
-        
-        # Approximate linear fit
         m = np.mean([self.y[j] - self.y[j-1] for j in idxs])
         m /= np.mean([self.t[j] - self.t[j-1] for j in idxs])
         b = np.mean([self.y[j] - m*self.t[j] for j in idxs])
         
         
-        # Check R^2 from 5-12 min
+        # Check R^2 from 5-10 min
         if self.t[-1] < 6:
             return
         
         st = 5
-        et = 12 if self.t[-1] >= 12 else self.t[-1]
+        et = 10 if self.t[-1] >= 10 else self.t[-1]
         
         idxs, ts = get_range(self.t, st, et)
-                   
         lb, rb = idxs[0], idxs[-1]
+        
         thresh = m*np.array(self.t[lb:rb]) + b
         data = np.array(self.y[lb:rb])
         R2 = 1 - np.sum( (thresh - data)**2 )
@@ -540,27 +479,16 @@ class RealTimeLinear:
             # First fit
             self.m = m
             self.b = b
+            self.bounds = [lb, rb]
             self.R2 = R2
         
         if R2 >= 0.95 * self.R2:
             if abs(m) < abs(self.m):
                 self.m = m
                 self.b = b
+                self.bounds = [lb, rb]
                 self.R2 = R2
-        
-        
-        # elif (abs(self.m) < 0.003 and 
-        #     abs(m) < 0.003 and R2 >= self.R2):
-        #     # already flat slope, prioritize better R2
-        #     self.m = m
-        #     self.b = b
-        #     self.R2 = R2
-        
-        # elif (abs(m) < abs(self.m)):
-        #     # flatter slope
-        #     self.m = m
-        #     self.b = b
-        #     self.R2 = R2
+
         
         self.threshold = self.m * np.array(self.t) + self.b
         
@@ -573,41 +501,44 @@ class RealTimeLinear:
     
     
     def calc_Ct(self):
+        # Define Ct as the first point where y < (1-offset) * threshold
         for i in range(len(self.y)):
             if i >= self.left_ips:
-                
                 if (self.y[i] <= (1-self.offset)*self.threshold[i]):
-                    return i, self.t[i]
+                    return self.t[i]
             
-        return None, None
+        return None
     
+    
+    def find_start(self):
+        # Determine where threshold line is closest to y data
+        # This point is used for the initial current in calculating Sd
+        diff = self.threshold - self.y
+        idx, _ = find_nearest(diff, 0)
+        return idx
     
 
     def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
-                
-        
+        # Call positive or negative at this timepoint
         if not self.crossed:
             return
         
-        idx, self.Ct = self.calc_Ct()
-        if not idx:
+        self.Ct = self.calc_Ct()
+        idx = self.find_start()
+        if not self.Ct:
             return
-
-        # idx, _ = find_nearest(self.t, self.left_ips)
-        # self.Ct = self.left_ips
+        
         self.Sd = (self.y[idx] - self.y[-1])/self.y[idx]
-        print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
+        # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
             self.result = True
             if not self.flag:
                 self.flag = True
                 self.call_Sd = self.Sd
                 self.call_time = self.t[-1]
-                print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+                # print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         else:
             self.result = False
-            
-        # print(f't={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}'
         return
     
     
@@ -668,25 +599,15 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(figsize=(10,10))
     ax.set_ylim(0, 50)
     ax.set_xlim(-1.5, 32)
-    # dataln, = ax.plot([],[], 'o')
-    # smoothln, = ax.plot([],[], '--', color='k', lw=2)
-    # derivln, = ax.plot([],[], '--', color='orange', lw=2)
-    # peakln,  = ax.plot([],[], '-', color='blue', lw=2)
-    # baseln,  = ax.plot([], [], '--', color='k', lw=1.5)    
+    dataln, = ax.plot([],[], 'o')
+    smoothln, = ax.plot([],[], '--', color='k', lw=2)
+    derivln, = ax.plot([],[], '--', color='orange', lw=2)
+    peakln,  = ax.plot([],[], '-', color='blue', lw=2)
+    baseln,  = ax.plot([], [], '--', color='k', lw=1.5)    
     
-    # rtc = RealTimeCaller(datastream[0][0], datastream[0][1], 
-    #                      dataln, smoothln, derivln, peakln, baseln)
-    
-    
-    dataln, = ax.plot([], [], 'o')
-    avgln, = ax.plot([], [], '--', color='k', lw=2)
-    stdln1, = ax.plot([], [], '--', color='orange', lw=1.2)
-    stdln2, = ax.plot([], [], '--', color='orange', lw=1.2)
-    
-    rtc = RealTimeSDAvg(datastream[0][0], datastream[0][1],
-                        dataln, avgln, stdln1, stdln2)
-    
-    
+    rtc = RealTimeCaller(datastream[0][0], datastream[0][1], 
+                          dataln, smoothln, derivln, peakln, baseln)
+   
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
                             interval=10, blit = True,
                             frames = datastream[1:], repeat=False)
