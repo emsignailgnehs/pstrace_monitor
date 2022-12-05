@@ -387,6 +387,7 @@ class RealTimeLinear:
         self.offset = 0.05
         self.m = None
         self.b = None
+        self.R2 = 0
         
         self.window     = window    # Hanning func smoothing window
         self.normalizeRange = (2,3) # time bounds for normalization
@@ -412,9 +413,11 @@ class RealTimeLinear:
     def update(self, data, plots=False):
         
         t, pc = data
+        if self.norm_val == 1:
+            self.norm_val = 1 if pc == 0 else pc
         self.i += 1
         self.t.append(t)    
-        self.y.append(pc)
+        self.y.append(pc/self.norm_val)
         
         # self.smooth()
         # self.calc_dy()
@@ -492,30 +495,15 @@ class RealTimeLinear:
 
     
     def thresholding_algo(self, n=10, lag=7):
-        
-        # Do linear fit on n points, 
-        # Check if this point is significantly below this baseline
-        # if so, positive
-        
-        # def linear(t, m, b):
-        #     return m*t + b
-        
-        # i = len(self.y) - 1
 
-        # idxs = np.arange(i-n-lag, i-lag).astype(int)
-        # lb, rb = min(idxs), max(idxs)
-        
-        # if lb < 5:
-        #     return
-
-        # # linear fit
-        # popt = np.polyfit(self.t[lb:rb], self.y[lb:rb], deg=1)
-        # self.threshold = linear(np.array(self.t), *popt)
-        # if self.y[i] < 0.95*self.threshold[i]:
-        #     print('positive')
-        
-        
         ### Find flattest n-point baseline ###
+        
+        if self.call_time != 0:
+            # Already called positive, don't update the baseline
+            # Update self.threshold for drawing
+            self.threshold = self.m * np.array(self.t) + self.b
+            return
+        
         i = len(self.y) - 1
         if i <= n:
             return
@@ -532,14 +520,51 @@ class RealTimeLinear:
         b = np.mean([self.y[j] - m*self.t[j] for j in idxs])
         
         
+        # Check R^2 from 5-12 min
+        if self.t[-1] < 6:
+            return
         
-        if (self.m is None or abs(m) < abs(self.m)):
+        st = 5
+        et = 12 if self.t[-1] >= 12 else self.t[-1]
+        
+        idxs, ts = get_range(self.t, st, et)
+                   
+        lb, rb = idxs[0], idxs[-1]
+        thresh = m*np.array(self.t[lb:rb]) + b
+        data = np.array(self.y[lb:rb])
+        R2 = 1 - np.sum( (thresh - data)**2 )
+        
+        
+        # Choose which fit to save
+        if (self.m is None):
+            # First fit
             self.m = m
             self.b = b
- 
+            self.R2 = R2
+        
+        if R2 >= 0.95 * self.R2:
+            if abs(m) < abs(self.m):
+                self.m = m
+                self.b = b
+                self.R2 = R2
+        
+        
+        # elif (abs(self.m) < 0.003 and 
+        #     abs(m) < 0.003 and R2 >= self.R2):
+        #     # already flat slope, prioritize better R2
+        #     self.m = m
+        #     self.b = b
+        #     self.R2 = R2
+        
+        # elif (abs(m) < abs(self.m)):
+        #     # flatter slope
+        #     self.m = m
+        #     self.b = b
+        #     self.R2 = R2
+        
         self.threshold = self.m * np.array(self.t) + self.b
         
-        if self.y[i] < (1-self.offset)*self.threshold[i]:
+        if self.y[i] < (1-0.02)*self.threshold[i]:
             if not self.crossed:
                 self.left_ips = i
                 self.crossed = True
@@ -548,9 +573,9 @@ class RealTimeLinear:
     
     
     def calc_Ct(self):
-        
         for i in range(len(self.y)):
             if i >= self.left_ips:
+                
                 if (self.y[i] <= (1-self.offset)*self.threshold[i]):
                     return i, self.t[i]
             
@@ -558,7 +583,7 @@ class RealTimeLinear:
     
     
 
-    def evaluate_result(self, Ct_thresh=25, Sd_thresh=0.10):
+    def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
                 
         
         if not self.crossed:
@@ -567,28 +592,43 @@ class RealTimeLinear:
         idx, self.Ct = self.calc_Ct()
         if not idx:
             return
-        
+
         # idx, _ = find_nearest(self.t, self.left_ips)
         # self.Ct = self.left_ips
         self.Sd = (self.y[idx] - self.y[-1])/self.y[idx]
-        # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
+        print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
             self.result = True
             if not self.flag:
                 self.flag = True
                 self.call_Sd = self.Sd
+                self.call_time = self.t[-1]
                 print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         else:
             self.result = False
             
         # print(f't={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}'
         return
+    
+    
+    def make_plot(self, title=''):        
+        fig, ax = plt.subplots(figsize=(10,10))
+        ax.set_title(title)
+        ax.set_ylim(0, 2)
+        ax.set_xlim(-1.5, 32)
+        self.dataln, = ax.plot([],[], 'o')
+        self.threshln, = ax.plot([],[], '--', color='k', lw=2)
+        
+        self.update_lines()
+        
+        plt.show()
+        return fig
         
 
 
 
 
-class CallerSimulator(RealTimeCaller):
+class CallerSimulator(RealTimeLinear):
     
     def __init__(self, X, y, name, device):
         

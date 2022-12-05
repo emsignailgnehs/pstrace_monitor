@@ -23,7 +23,7 @@ def extract_data(file):
     return X, y, names, devices
 
 
-def run_with_plot(file, i = 2):  
+def run_with_plot(file, i = 13):  
     X, y, names, devices = extract_data(file)
     
     X = X[i]
@@ -32,9 +32,8 @@ def run_with_plot(file, i = 2):
     datastream = [(t[i], pc[i]) for i in range(0, len(t))]
             
     fig, ax = plt.subplots(figsize=(10,10))
-    ax.set_ylim(0,50)
-    ax.set_xlim(-1.5, 32)
-    
+    # ax.set_ylim(0,50)
+    # ax.set_xlim(-1.5, 32)
     # dataln, = ax.plot([],[], 'o')
     # smoothln, = ax.plot([],[], '--', color='k', lw=2)
     # derivln, = ax.plot([],[], '--', color='orange', lw=2)
@@ -44,6 +43,9 @@ def run_with_plot(file, i = 2):
     # rtc = RealTimeCaller(datastream[0][0], datastream[0][1],
     #                         dataln, smoothln, derivln, peakln, baseln)
     
+
+    ax.set_ylim(0, 2)
+    ax.set_xlim(-1.5, 32)    
     dataln, = ax.plot([], [], 'o')
     avgln, = ax.plot([], [], '--', color='k', lw=2)
     threshln, = ax.plot([], [], '--', color='orange', lw=1.2)
@@ -141,7 +143,8 @@ class Comparator:
         return prediction
     
     def realtime_algo_call(self):
-        self.runner = CallerSimulator(self.X, self.y, self.name, self.device)
+        self.runner = CallerSimulator(self.X, self.y, self.name, 
+                                      self.device)
         runner = self.runner
         runner.run()
         prediction = {'res': runner.result,
@@ -169,9 +172,10 @@ class Comparator:
         if (d[(r, s)] == 'False positive' or 
             d[(r, s)] == 'False negative'):
             rtc = self.runner
-            # rtc.make_plot(title=d[(r, s)])
+            rtc.make_plot(title=d[(r, s)])
         
         return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
+
 
 
 def compare_all(folder, n=20000):
@@ -210,6 +214,10 @@ def compare_all(folder, n=20000):
     for key, l in d.items():
         print(f'{key}: {len(l)}')
         
+    _, _, _, calltime = zip(*d['True positive'])
+    print('')
+    print(f'Call time:{np.mean(calltime):0.2f} +- {np.std(calltime):0.2f} min')
+        
     return d, bads, comp
 
 
@@ -237,10 +245,13 @@ if __name__ == '__main__':
     #             f.write(f'{V},{I}\n')
             
     
-    rtc, ani = run_with_plot(file)
+    # rtc, ani = run_with_plot(file)
     
-    # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
-    # d, bads, comp = compare_all(folder)
+    folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
+    d, bads, comp = compare_all(folder)
+    
+
+
     
                 
     
