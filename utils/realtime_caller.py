@@ -368,7 +368,8 @@ class RealTimeCaller:
 
 class RealTimeLinear:
     def __init__(self, t0, pc0, dataln=None, avgln=None, 
-                 threshln = None, window=11, plots=False):
+                 threshln = None, window=11, plots=False,
+                 **kwargs):
         
         # Initialize variables
         self.i          = -1   # Index
@@ -376,12 +377,18 @@ class RealTimeLinear:
         self.y          = []   # Normalized peak current
         self.threshold  = []   # Calling threshold line
         self.norm_val   = 1    # Normalization constant 
-        self.offset = 0.05
+        
         
         # Threshold line fit parameters
         self.m      = None
         self.b      = None
         self.R2     = 0
+
+        self.offset     = kwargs.get('offset', 0.05)
+        self.st         = kwargs.get('st', 5)
+        self.et         = kwargs.get('et', 10)
+        self.Ct_thresh  = kwargs.get('Ct_thresh', 20)
+        self.Sd_thresh  = kwargs.get('Sd_thresh', 0.1)
         
         # Result fields and flags
         self.Ct             = 1000
@@ -463,8 +470,8 @@ class RealTimeLinear:
         if self.t[-1] < 6:
             return
         
-        st = 5
-        et = 10 if self.t[-1] >= 10 else self.t[-1]
+        st = self.st
+        et = self.et if self.t[-1] >= self.et else self.t[-1]
         
         idxs, ts = get_range(self.t, st, et)
         lb, rb = idxs[0], idxs[-1]
@@ -518,17 +525,22 @@ class RealTimeLinear:
         return idx
     
 
-    def evaluate_result(self, Ct_thresh=20, Sd_thresh=0.10):
+    def evaluate_result(self):
+        
+        Ct_thresh = self.Ct_thresh 
+        Sd_thresh = self.Sd_thresh
+        
         # Call positive or negative at this timepoint
         if not self.crossed:
             return
         
         self.Ct = self.calc_Ct()
-        idx = self.find_start()
+        # idx = self.find_start()
+        idx = self.left_ips
         if not self.Ct:
             return
         
-        self.Sd = (self.y[idx] - self.y[-1])/self.y[idx]
+        self.Sd = (self.threshold[idx] - self.y[-1])/self.threshold[idx]
         # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
             self.result = True
@@ -561,14 +573,14 @@ class RealTimeLinear:
 
 class CallerSimulator(RealTimeLinear):
     
-    def __init__(self, X, y, name, device):
+    def __init__(self, X, y, name, device, kwargs):
         
         self.X      = X
         self.y      = y
         self.name   = name
         self.device = device
         
-        super().__init__(X[0][0], X[1][0])
+        super().__init__(X[0][0], X[1][0], **kwargs)
         
     def run(self):
         

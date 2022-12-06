@@ -17,7 +17,7 @@ def extract_data(file):
     pickleFiles = [file]
     dataSource.load_picklefiles(pickleFiles)
     # return dataSource
-
+  
 
     X, y, names,devices = removeDuplicates(*dataSource.exportXy())
     return X, y, names, devices
@@ -25,7 +25,7 @@ def extract_data(file):
 
 def run_with_plot(file, i = 13):  
     X, y, names, devices = extract_data(file)
-    
+
     X = X[i]
     t, pc = X[0], X[1]
     
@@ -55,7 +55,7 @@ def run_with_plot(file, i = 13):
     
     
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
-                            interval=10, blit = True,
+                            interval=100, blit = True,
                             frames = datastream[1:], repeat=False,
                             init_func = rtc.update_lines)
     
@@ -119,11 +119,13 @@ def run_all(files):
 
 class Comparator:
     
-    def __init__(self, X, y, name, device):
+    def __init__(self, X, y, name, device, kwargs):
+        # kwargs to pass to RealTimeCaller class
         self.X = X
         self.y = y
         self.name = name
         self.device = device
+        self.kwargs = kwargs
         
     def standard_algo_call(self):
         hCtTPredictT = Pipeline([
@@ -144,22 +146,22 @@ class Comparator:
     
     def realtime_algo_call(self):
         self.runner = CallerSimulator(self.X, self.y, self.name, 
-                                      self.device)
+                                      self.device, self.kwargs)
         runner = self.runner
         runner.run()
         prediction = {'res': runner.result,
-                      'Ct': runner.call_time,
+                      'Ct': runner.Ct,
                       'Pr': 0,
                       'Sd': runner.call_Sd,
                       'call_time': runner.call_time}
         return prediction
     
-    def compare(self):
-        standard_pred = self.standard_algo_call()
-        realtime_pred = self.realtime_algo_call()
+    def compare(self, plot=True):
+        self.standard_pred = self.standard_algo_call()
+        self.realtime_pred = self.realtime_algo_call()
         
-        s = standard_pred['res']
-        r = realtime_pred['res']
+        s = self.standard_pred['res']
+        r = self.realtime_pred['res']
 
         d = {(1,1):'True positive',
              (1,0):'False positive',
@@ -172,13 +174,14 @@ class Comparator:
         if (d[(r, s)] == 'False positive' or 
             d[(r, s)] == 'False negative'):
             rtc = self.runner
-            # rtc.make_plot(title=d[(r, s)])
+            if plot:
+                rtc.make_plot(title=d[(r, s)])
         
-        return _eval(r), _eval(s), d[(r, s)], realtime_pred['call_time']
+        return _eval(r), _eval(s), d[(r, s)], self.realtime_pred['call_time']
 
 
 
-def compare_all(folder, n=20000):
+def compare_all(folder, n=20000, kwargs={}):
     import os
     
     i = 0 # count total number of sensors evaluated
@@ -194,27 +197,27 @@ def compare_all(folder, n=20000):
             
             data_list = [l for l in zip(*data)]
             for i, (X, y, name, device) in enumerate(data_list):
-                comp = Comparator(X, y, name, device)
-                rt_res, st_red, res, call_time = comp.compare()
+                comp = Comparator(X, y, name, device, kwargs)
+                rt_res, st_res, res, call_time = comp.compare()
                 
-                d[res].append((file, name, device, call_time))
+                d[res].append((file, name, device, call_time, comp))
                 # print(f'{res}     {file}')
                 if res == 'False negative':
                     bads.append((f, i, comp))
-                    print('')
-                    print(f'false negative {file}')
+                    # print('')
+                    # print(f'false negative {file}')
                     call, sd, ct =  (comp.runner.call_time, 
                                      comp.runner.Sd, 
                                      comp.runner.Ct)
-                    print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
+                    # print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
                 if res == 'False positive':
                     bads.append((f, i, comp))
-                    print('')
-                    print(f'false positive {file}')
+                    # print('')
+                    # print(f'false positive {file}')
                     call, sd, ct =  (comp.runner.call_time, 
                                      comp.runner.Sd, 
                                      comp.runner.Ct)
-                    print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
+                    # print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
             
                 
                 i += 1
@@ -225,11 +228,57 @@ def compare_all(folder, n=20000):
     for key, l in d.items():
         print(f'{key}: {len(l)}')
         
-    _, _, _, calltime = zip(*d['True positive'])
-    print('')
+    _, _, _, calltime, _ = zip(*d['True positive'])
     print(f'Call time:{np.mean(calltime):0.2f} +- {np.std(calltime):0.2f} min')
         
     return d, bads, comp
+
+
+
+def compare_params(folder):
+    Ct_thresh = [20,25]
+    Sd_thresh = [0.1, 0.11, 0.12]
+    st = [3,5,7]
+    et = [8,10,12]
+    
+    for Ct in Ct_thresh:
+        for Sd in Sd_thresh:
+            print(f'====== Ct_thresh = {Ct}, Sd_thresh = {Sd} ======')
+            kwargs = {'Ct_thresh':Ct, 'Sd_thresh': Sd}
+            compare_all(folder, kwargs=kwargs)
+            print('')
+  
+            
+def scatterplot(d):
+    
+    comps = []
+    for key, l in d.items():
+        for _,_,_,_, comp in l:
+            comps.append((key, comp))
+    
+    
+    
+    fig, ax = plt.subplots(figsize=(10,10))
+    for (key,comp) in comps:
+        d = comp.realtime_pred
+        d2 = comp.standard_pred
+        Ct, Sd, rt_call = d['Ct'], d['Sd'], d['res']
+        st_Ct, st_Sd, st_call = d2['Ct'], d2['Sd'], d2['res']
+        
+        if rt_call == st_call == True: color = 'green'
+        if rt_call == st_call == False: color= 'darkgreen'
+        if rt_call == True and st_call == False: color = 'darkred'
+        if rt_call == False and st_call == True: color = 'red'
+        
+        ax.scatter(st_Ct, Ct, color = color)
+    ax.set_xlabel('Standard')
+    ax.set_ylabel('Realtime')
+    ax.axvline(20)
+    ax.axhline(20)
+    # ax.set_xlim(0, 26)
+    # ax.set_ylim(-0.1, 1)
+        
+    return
 
 
 if __name__ == '__main__':
@@ -255,11 +304,12 @@ if __name__ == '__main__':
     #         for (V, I) in l:
     #             f.write(f'{V},{I}\n')
             
-    
-    # rtc, ani = run_with_plot(file)
+    # file = r'C:/Users/Elmer Guzman/Desktop/test.picklez'
+    # rtc, ani = run_with_plot(file, 2)
     
     folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
     d, bads, comp = compare_all(folder)
+    # compare_params(folder)
     
 
 
