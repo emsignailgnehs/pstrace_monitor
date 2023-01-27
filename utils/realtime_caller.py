@@ -97,7 +97,7 @@ class RealTimeCaller:
                 
         if plots:
             self.update_lines()
-            return *self.lines,
+            return self.lines,
         
         else:
             return self.result
@@ -119,7 +119,7 @@ class RealTimeCaller:
         
         if len(self.threshold) != 1:
             self.baseln.set_data(self.t, self.norm_val*self.threshold)
-        return *self.lines,
+        return self.lines,
     
     
     def smooth(self):
@@ -387,11 +387,12 @@ class RealTimeLinear:
         self.offset     = kwargs.get('offset', 0.05)
         self.st         = kwargs.get('st', 5)
         self.et         = kwargs.get('et', 10)
-        self.Ct_thresh  = kwargs.get('Ct_thresh', 20)
+        self.Ct_thresh  = kwargs.get('Ct_thresh', 100)
         self.Sd_thresh  = kwargs.get('Sd_thresh', 0.1)
         
         # Result fields and flags
         self.Ct             = 1000
+        self.Sd             = 0.0
         self.result         = False 
         self.flag           = False # Flag if positive result has been called
         self.crossed        = False # If dy has crossed the rolling threshold
@@ -413,7 +414,7 @@ class RealTimeLinear:
         if self.norm_val == 1:
             self.norm_val = 1 if pc == 0 else pc
         self.i += 1
-        self.t.append(t)    
+        self.t.append(t+5)    
         self.y.append(pc/self.norm_val)
         
         self.thresholding_algo()
@@ -427,7 +428,7 @@ class RealTimeLinear:
                 
         if plots:
             self.update_lines()
-            return *self.lines,
+            return self.lines,
         
         else:
             return self.result
@@ -439,7 +440,7 @@ class RealTimeLinear:
         if len(self.threshold) > 5:
             self.threshln.set_data(self.t, np.array(self.threshold))
        
-        return *self.lines, 
+        return self.lines, 
         
 
     
@@ -490,7 +491,7 @@ class RealTimeLinear:
             self.R2 = R2
         
         if R2 >= 0.95 * self.R2:
-            if abs(m) < abs(self.m):
+            if (abs(m) < abs(self.m)):
                 self.m = m
                 self.b = b
                 self.bounds = [lb, rb]
@@ -526,6 +527,9 @@ class RealTimeLinear:
     
 
     def evaluate_result(self):
+        
+        if self.t[-1] < 10:
+            return
         
         Ct_thresh = self.Ct_thresh 
         Sd_thresh = self.Sd_thresh
@@ -569,7 +573,8 @@ class RealTimeLinear:
         
 
 
-
+# early_call_times = [10, 15, 20, 25, 29.5]
+early_call_times = [17.5, 20, 22.5, 25, 27.5, 29.5]
 
 class CallerSimulator(RealTimeLinear):
     
@@ -579,6 +584,10 @@ class CallerSimulator(RealTimeLinear):
         self.y      = y
         self.name   = name
         self.device = device
+                
+        self.earlycalls = {
+            t: None for t in early_call_times
+            }
         
         super().__init__(X[0][0], X[1][0], **kwargs)
         
@@ -589,6 +598,10 @@ class CallerSimulator(RealTimeLinear):
         
         for (t, pc) in zip(ts, pcs):
             self.update((t,pc))
+            for call_time in early_call_times:
+                if (t+5 >= call_time and
+                    self.earlycalls[call_time] is None):
+                    self.earlycalls[call_time] = self.result
             
         
 
