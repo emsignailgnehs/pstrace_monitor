@@ -12,6 +12,7 @@ import time
 
 """
 Update Note:
+2023/01/31: Change the threshold to accomondate the new data structure
 2022/11/17: Change the Ct definition to Ct = left_ips
 """
 
@@ -48,7 +49,7 @@ print("Total Positive Data: "+str(sum(y)))
 print("Total Negative Data: "+str(len(y)-sum(y)))
 
 #%% Calculate
-cutoffStart = 2
+cutoffStart = 7
 cutoffEnd = 25
 normStart = cutoffStart
 normEnd = cutoffStart + 1
@@ -92,7 +93,7 @@ hCtTPredictT = Pipeline([
     ('Derivitive', Derivitive(window=31, deg=3)),
     ('peak', FindPeak()),
     ('logCt',HyperCt()),
-    ('predictor',CtPredictor(ct=20,prominence=0,sd=0.1))
+    ('predictor',CtPredictor(ct=25,prominence=0,sd=0.1))
 ])
 hCtpred_X = hCtTPredictT.transform(X)
 

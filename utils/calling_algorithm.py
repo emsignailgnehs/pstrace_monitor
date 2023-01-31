@@ -16,7 +16,7 @@ Update Note:
 2022/11/17: Change the Ct definition to Ct = left_ips
 """
 
-_version = '2stage_prescan_v1.0.4'
+_version = '2stage_prescan_v1.0.8'
 
 def get_picklez(folder):
     fs = []
