@@ -21,20 +21,49 @@ def extract_data(file):
     dataSource.load_picklefiles(pickleFiles)
     # return dataSource
   
-
+    concentrations = []
     X, y, names,devices = removeDuplicates(*dataSource.exportXy())
-    return X, y, names, devices
+    
+    # Get virus loading from name
+    for n, name in enumerate(names):
+        if 'NTC' in name:
+            concentrations.append(0)
+            continue
+        l = name.split(' ')
+        for i, s in enumerate(l):
+            if 'cp/swab' in s:
+                if s == 'cp/swab':
+                    concentrations.append(l[i-1])
+                elif s.endswith('cp/swab'):
+                    concentrations.append(s.rstrip('cp/swab'))
+                else:
+                    print(f'Unrecognized concentration: {s}')
+        if len(concentrations) != (n+1):
+            print('failed to find concentration: ', name)
+        
+        if (concentrations[-1] != 0 and y[n] == 0):
+            y[n] = 1
+        # print(y[n], concentrations[-1])
+        
+    
+    to_num = {0:0,
+              '2e3': 2000,
+              'e4': 10000}
+    for i, c in enumerate(concentrations):
+        concentrations[i] = to_num[c]
+    
+    return X, y, names, concentrations, devices
 
 
 def run_with_plot(file, i = 13):  
-    X, y, names, devices = extract_data(file)
+    X, y, names, concs, devices = extract_data(file)
 
     X = X[i]
     t, pc = X[0], X[1]
     
     datastream = [(t[i], pc[i]) for i in range(0, len(t))]
             
-    fig, ax = plt.subplots(figsize=(5,5), dpi=300)
+    fig, ax = plt.subplots(figsize=(5,5), dpi=100)
     # ax.set_ylim(0,50)
     # ax.set_xlim(-1.5, 32)
     # dataln, = ax.plot([],[], 'o')
@@ -54,14 +83,14 @@ def run_with_plot(file, i = 13):
     dataln, = ax.plot([], [], 'o')
     avgln, = ax.plot([], [], '--', color='k', lw=2)
     threshln, = ax.plot([], [], '--', color='orange', lw=1.2)
-    import time
-    time.sleep(1)
+    # import time
+    # time.sleep(1)
     rtc = RealTimeLinear(datastream[0][0], datastream[0][1],
                         dataln, avgln, threshln)
     
     
     ani     = FuncAnimation(fig, partial(rtc.update, plots=True), 
-                            interval=100, blit = True,
+                            interval=50, blit = True,
                             frames = datastream[1:], repeat=False,
                             init_func = rtc.update_lines)
     
@@ -152,11 +181,12 @@ def make_truth_table(earlycalls, ground_truth):
 
 class Comparator:
     # compare realtime algorithm to full time algorithm
-    def __init__(self, X, y, name, device, plot, kwargs):
+    def __init__(self, X, y, name, conc, device, plot, kwargs):
         # kwargs to pass to RealTimeCaller class
         self.X = X
         self.y = y
         self.name = name
+        self.conc = conc
         self.device = device
         self.plot   = plot
         self.kwargs = kwargs
@@ -195,7 +225,8 @@ class Comparator:
         self.standard_pred = self.standard_algo_call()
         self.realtime_pred = self.realtime_algo_call()
         
-        s = self.standard_pred['res']
+        # s = self.standard_pred['res']
+        s = self.y
         r = self.realtime_pred['res']
 
         d = {(1,1):'True positive',
@@ -213,7 +244,11 @@ class Comparator:
                 rtc.make_plot(title=d[(r, s)])
         
         # make truth table
-        tt = make_truth_table(self.realtime_pred['earlycalls'], s)
+        # ground truth = base algorithm
+        # tt = make_truth_table(self.realtime_pred['earlycalls'], s)
+        
+        # ground truth = user mark
+        tt = make_truth_table(self.realtime_pred['earlycalls'], self.y)
         
         return d[(r, s)], tt, self.realtime_pred['call_time']
 
@@ -234,13 +269,16 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
     j = 0
     for file in glob.glob(folder + '/**', recursive=True):
         if file.endswith('.picklez'):
+            print(file)
             f = os.path.join(folder, file)
             data = extract_data(f)
+            X, y, names, concs, devices = data
             
             data_list = [l for l in zip(*data)]
-            for i, (X, y, name, device) in enumerate(data_list):
+            for i, (X, y, name, conc, device) in enumerate(data_list):
                 if j > n: break
-                comp = Comparator(X, y, name, device, plot_mismatch, kwargs)
+                comp = Comparator(X, y, name, conc, device, 
+                                  plot_mismatch, kwargs)
                 res, truth_table, call_time = comp.compare()
                 if summed_table is None:
                     # Count # of true pos, true neg, false pos, false neg
@@ -248,7 +286,7 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
                 else:
                     summed_table += truth_table
                 
-                d[res].append((file, name, device, call_time, comp))
+                d[res].append((file, name, conc, device, call_time, comp))
                 # print(f'{res}     {file}')
                 call, sd, ct =  (comp.runner.call_time, 
                                  comp.runner.Sd, 
@@ -270,7 +308,7 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
     # for key, l in d.items():
     #     print(f'{key}: {len(l)}')
         
-    _, _, _, calltime, _ = zip(*d['True positive'])
+    _, _, _, _, calltime, _ = zip(*d['True positive'])
     print(f'Call time (true positive):{np.mean(calltime):0.2f} +- {np.std(calltime):0.2f} min')
     # print(f'Median   :{np.median(calltime):0.2f} +- {np.quantile(calltime, 0.75):0.2f} min')
     
@@ -332,10 +370,10 @@ def calltime_histogram(d, title, name):
     true_pos  = []
     false_pos = []
     
-    for _,_,_,_, comp in d['True positive']:
+    for _,_,_,_,_, comp in d['True positive']:
         true_pos.append(comp.runner.call_time)
         
-    for _,_,_,_, comp in d['False positive']:
+    for _,_,_,_,_, comp in d['False positive']:
         false_pos.append(comp.runner.call_time)   
     
     ax.hist(true_pos, bins=bins, rwidth=0.9, histtype='barstacked')
@@ -344,45 +382,31 @@ def calltime_histogram(d, title, name):
     ax.set_ylabel('Count')
     ax.set_title(title)
     # plt.show()
-    fname = os.path.join(r'C:\SynologyDrive\Brian\Calling algorithm\realtime calling data\varying SD histograms', 
-                         name +'.png')
-    plt.savefig(fname)
-    plt.close()
+    # fname = os.path.join(r'C:\SynologyDrive\Brian\Calling algorithm\realtime calling data\varying SD histograms', 
+    #                      name +'.png')
+    # plt.savefig(fname)
+    # plt.close()
 
 
-if __name__ == '__main__':
-    file = r'C:/Users/Elmer Guzman/SynologyDrive/RnD/Projects/LAMP-Covid Sensor/Data Export/20221102/20221102NewLMNSwabTest.picklez'
-
-    # files = ["C:/Users/Elmer Guzman/Desktop/covid sensor data/20221017NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221018NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221025NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221026NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221027NewlyReceivedLMNQC.picklez",
-    # "C:/Users/Elmer Guzman/Desktop/covid sensor data/20221102NewLMNSwabTest.picklez"
-    # ]
-    
-    # runners, true_pos, true_neg, false_pos, false_neg = run_all(files)
-    
-    # ds = extract_data(file)
-    # out_folder = r'C:\Users\Elmer Guzman\Desktop\simdata\C4'
-    # import os
-    # for i, (V, I) in enumerate(ds.rawView['data'][3]['data']['rawdata']):
-    #     file = os.path.join(out_folder, f'{i}.csv')
-    #     l = zip(V, I)
-    #     with open(file, 'a') as f:
-    #         for (V, I) in l:
-    #             f.write(f'{V},{I}\n')
-            
+if __name__ == '__main__':    
     # file = r'C:/Users/Elmer Guzman/Desktop/covid sensor data/20221103Test.picklez'
     # rtc, ani = run_with_plot(file, 10)
     
-    folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
-    for thresh in [0.1, 0.08, 0.06, 0.04, 0.02, 0.01]:
-    # for thresh in [0.1]:
+    # file = r'C:/SynologyDrive/Brian/Calling algorithm/New collected data/20230131 2000cpswab 5min R18S C4 Run1.picklez'
+    # file = r'C:/SynologyDrive/Brian/Calling algorithm/New collected data/20230131 NTC 5min N6O4 C1 Run1.picklez'
+    # rtc, ani = run_with_plot(file, 3)
+    
+    # Old data:
+    # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
+    
+    # New data:
+    folder = r'C:\SynologyDrive\Brian\Calling algorithm\New collected data'
+    # for thresh in [0.1, 0.08, 0.06, 0.04, 0.02, 0.01]:
+    for thresh in [0.1]:
         print(f' ==== Threshold = {thresh} ====')
         print('')
         d, bads, comp, tt = compare_all(folder,
-                                    plot_mismatch=False,
+                                    plot_mismatch=True,
                                     kwargs={'Sd_thresh': thresh})
         df = pd.DataFrame(tt, index=['True positive', 'True negative', 'False positive', 'False negative'],
                           columns = ['17.5', '20.0', '22.5', '25.0', '27.5', '30.0'])

@@ -385,8 +385,8 @@ class RealTimeLinear:
         self.R2     = 0
 
         self.offset     = kwargs.get('offset', 0.05)
-        self.st         = kwargs.get('st', 5)
-        self.et         = kwargs.get('et', 10)
+        self.st         = kwargs.get('st', 8)
+        self.et         = kwargs.get('et', 12)
         self.Ct_thresh  = kwargs.get('Ct_thresh', 100)
         self.Sd_thresh  = kwargs.get('Sd_thresh', 0.1)
         
@@ -396,6 +396,7 @@ class RealTimeLinear:
         self.result         = False 
         self.flag           = False # Flag if positive result has been called
         self.crossed        = False # If dy has crossed the rolling threshold
+        self.isNormalized   = False
         self.call_time      = 0
         self.call_Sd        = 0
         
@@ -411,10 +412,14 @@ class RealTimeLinear:
     def update(self, data, plots=False):
         
         t, pc = data
-        if self.norm_val == 1:
-            self.norm_val = 1 if pc == 0 else pc
+        # if self.norm_val == 1:
+            # self.norm_val = 1 if pc == 0 else pc
+        if (t > 6 and not self.isNormalized):
+            self.norm_val = pc
+            self.isNormalized = True
+            self.y = list(np.array(self.y)/self.norm_val)
         self.i += 1
-        self.t.append(t+5)    
+        self.t.append(t)    
         self.y.append(pc/self.norm_val)
         
         self.thresholding_algo()
@@ -428,7 +433,7 @@ class RealTimeLinear:
                 
         if plots:
             self.update_lines()
-            return self.lines,
+            return *self.lines,
         
         else:
             return self.result
@@ -438,11 +443,75 @@ class RealTimeLinear:
         # Update plot if doing realtime plotting
         self.dataln.set_data(self.t, self.y)
         if len(self.threshold) > 5:
-            self.threshln.set_data(self.t, np.array(self.threshold))
+            thresh = self.m*np.array(self.t) + self.b
+            self.threshln.set_data(self.t, np.array(thresh))
        
-        return self.lines, 
+        return *self.lines, 
         
 
+    def thresholding_algo(self, n=7, m = 7):
+
+        ### Use linear n point baseline trailing by m points ###
+        
+        if self.call_time != 0:
+            # Already called positive, don't update the baseline
+            # Update self.threshold for drawing
+            self.threshold = self.m * np.array(self.t) + self.b
+            return
+        
+        i = len(self.y) - m
+        if i <= n:
+            return
+                
+        # Approximate linear fit
+        idxs = np.arange(i-n, i).astype(int)
+        lb, rb = min(idxs), max(idxs)
+        
+        m = np.mean([self.y[j] - self.y[j-1] for j in idxs])
+        m /= np.mean([self.t[j] - self.t[j-1] for j in idxs])
+        b = np.mean([self.y[j] - m*self.t[j] for j in idxs])
+        
+        
+        # Check R^2 from 5-10 min
+        if self.t[-1] < self.st:
+            return
+        
+        st = self.st
+        if self.t[-1] >= self.et:
+            et = self.et
+        else:
+            et = self.t[-1]
+        # 
+        idxs, ts = get_range(self.t, st, et)
+        lb, rb = idxs[0], idxs[-1]
+        
+        thresh = m*np.array(self.t[lb:rb]) + b
+        data = np.array(self.y[lb:rb])
+        R2 = 1 - np.sum( (thresh - data)**2 )
+        
+        
+        # Choose which fit to save
+        if (self.m is None):
+            # First fit
+            self.m = m
+            self.b = b
+            self.bounds = [lb, rb]
+            self.R2 = R2
+        if not self.flag:
+            self.m = m
+            self.b = b
+            self.bounds = [lb, rb]
+            self.R2 = R2
+
+        
+        self.threshold = m * np.array(self.t) + b
+        
+        if self.y[i] < (1-0.02)*self.threshold[i]:
+            # if not self.crossed:
+            self.left_ips = i
+            self.crossed = True
+    
+        return
     
     def thresholding_algo(self, n=10):
 
@@ -457,7 +526,7 @@ class RealTimeLinear:
         i = len(self.y) - 1
         if i <= n:
             return
-        
+                
         # Approximate linear fit
         idxs = np.arange(i-n, i).astype(int)
         lb, rb = min(idxs), max(idxs)
@@ -468,12 +537,15 @@ class RealTimeLinear:
         
         
         # Check R^2 from 5-10 min
-        if self.t[-1] < 6:
+        if self.t[-1] < self.st:
             return
         
         st = self.st
-        et = self.et if self.t[-1] >= self.et else self.t[-1]
-        
+        if self.t[-1] >= self.et:
+            et = self.et
+        else:
+            et = self.t[-1]
+        # 
         idxs, ts = get_range(self.t, st, et)
         lb, rb = idxs[0], idxs[-1]
         
@@ -490,12 +562,21 @@ class RealTimeLinear:
             self.bounds = [lb, rb]
             self.R2 = R2
         
-        if R2 >= 0.95 * self.R2:
-            if (abs(m) < abs(self.m)):
-                self.m = m
-                self.b = b
-                self.bounds = [lb, rb]
-                self.R2 = R2
+        # if R2 >= 0.95 * self.R2:
+        if ((abs(m) < abs(self.m)) or
+            b < self.b or
+            R2 > self.R2):
+            self.m = m
+            self.b = b
+            self.bounds = [lb, rb]
+            self.R2 = R2
+                
+                
+        # if R2 > self.R2:
+        #     self.m = m
+        #     self.b = b
+        #     self.bounds = [lb, rb]
+        #     self.R2 = R2
 
         
         self.threshold = self.m * np.array(self.t) + self.b
@@ -508,10 +589,12 @@ class RealTimeLinear:
         return
     
     
-    def calc_Ct(self):
+    def calc_Ct(self, idx=None):
         # Define Ct as the first point where y < (1-offset) * threshold
+        if not idx:
+            idx = self.left_ips
         for i in range(len(self.y)):
-            if i >= self.left_ips:
+            if i >= idx:
                 if (self.y[i] <= (1-self.offset)*self.threshold[i]):
                     return self.t[i]
             
@@ -521,12 +604,17 @@ class RealTimeLinear:
     def find_start(self):
         # Determine where threshold line is closest to y data
         # This point is used for the initial current in calculating Sd
-        diff = self.threshold - self.y
+        diff = self.threshold[-10:] - self.y[-10:]
         idx, _ = find_nearest(diff, 0)
+        idx = len(self.threshold) - 10 + idx
+        
         return idx
     
 
     def evaluate_result(self):
+        
+        if self.call_time != 0:
+            return
         
         if self.t[-1] < 10:
             return
@@ -538,12 +626,12 @@ class RealTimeLinear:
         if not self.crossed:
             return
         
-        self.Ct = self.calc_Ct()
-        # idx = self.find_start()
-        idx = self.left_ips
+        idx = self.find_start()
+        # idx = self.left_ips
+        self.Ct = self.calc_Ct(idx)
+        
         if not self.Ct:
             return
-        
         self.Sd = (self.threshold[idx] - self.y[-1])/self.threshold[idx]
         # print(f'{self.t[-1]:0.2f}, {self.Ct:0.2f}, {self.Sd:0.2f}')     
         if (self.Ct <= Ct_thresh and self.Sd >= Sd_thresh):
@@ -552,7 +640,7 @@ class RealTimeLinear:
                 self.flag = True
                 self.call_Sd = self.Sd
                 self.call_time = self.t[-1]
-                # print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+                print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         else:
             self.result = False
         return
@@ -565,6 +653,7 @@ class RealTimeLinear:
         ax.set_xlim(-1.5, 32)
         self.dataln, = ax.plot([],[], 'o')
         self.threshln, = ax.plot([],[], '--', color='k', lw=2)
+        ax.axvline(self.call_time)
         
         self.update_lines()
         
@@ -599,7 +688,7 @@ class CallerSimulator(RealTimeLinear):
         for (t, pc) in zip(ts, pcs):
             self.update((t,pc))
             for call_time in early_call_times:
-                if (t+5 >= call_time and
+                if (t >= call_time and
                     self.earlycalls[call_time] is None):
                     self.earlycalls[call_time] = self.result
             
