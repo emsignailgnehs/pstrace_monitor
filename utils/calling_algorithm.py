@@ -80,7 +80,7 @@ def smooth(x,windowlenth=11,window='hanning'):
     s = np.r_[x[windowlenth-1:0:-1],x,x[-2:-windowlenth-1:-1]]
     w = getattr(np,window)(windowlenth)
     return np.convolve(w/w.sum(),s,mode='valid')[windowlenth//2:-(windowlenth//2)]
-    
+
 def timeseries_to_axis(timeseries):
     "convert datetime series to time series in minutes"
     return [(d-timeseries[0]).seconds/60 for d in timeseries]
@@ -167,8 +167,6 @@ class Smoother(BaseEstimator,TransformerMixin):
         # return np.apply_along_axis(self.transformer,1,X,)
         return np.array([self.transformer(i) for i in X],dtype='object')
 
- 
-
 class Derivitive(BaseEstimator,TransformerMixin):
     def __init__(self,window=31,deg=3):
         self.window = window
@@ -180,6 +178,26 @@ class Derivitive(BaseEstimator,TransformerMixin):
     def transformer(self,X):
         t,pc = X
         ss = savgol_filter(pc,window_length=self.window,polyorder=self.deg,deriv=1)        
+        return [t,-ss,pc]
+    def transform(self,X,y=None):        
+        # return np.apply_along_axis(self.transformer,1,X,)
+        return np.array([self.transformer(i) for i in X],dtype='object')
+
+class Derivitive2(BaseEstimator,TransformerMixin):
+    """
+    Added on 2023-03-06
+    Patched version of Derivative, the last value of the derivative is set to the max value of the derivative.
+    """
+    def __init__(self,window=31,deg=3):
+        self.window = window
+        self.deg = deg
+        
+    def fit(self,X,y=None):
+        return self 
+    def transformer(self,X):
+        t,pc = X
+        ss = savgol_filter(pc,window_length=self.window,polyorder=self.deg,deriv=1)
+        ss[-1] = max(ss)   
         return [t,-ss,pc]
     def transform(self,X,y=None):        
         # return np.apply_along_axis(self.transformer,1,X,)
