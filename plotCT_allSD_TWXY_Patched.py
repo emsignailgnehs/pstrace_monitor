@@ -172,7 +172,7 @@ for i,j in enumerate(y):
     m = '+' if y[i] else '-'
     title_color = 'red' if hCtpred_X[i][0]!=y[i] else 'green'
     
-    ax.set_title(f'hCt:{hyperCt:.1f} Pm:{peak_prominence:.2f} SD_end:{sd[-4]:.4f} P:{hp_n} M:{m}',
+    ax.set_title(f'hCt:{hyperCt:.1f} Pm:{peak_prominence:.2f} SD_end:{sd[-5]:.4f} P:{hp_n} M:{m}',
     fontdict={'color':title_color,'fontsize':10})
     ax.set_xlabel('\n'.join(textwrap.wrap(
         names[i].strip(), width=45)), fontdict={'fontsize': 10})        
