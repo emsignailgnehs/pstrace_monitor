@@ -36,6 +36,14 @@ def parse_desc(desc):
     }
     return dict_desc
 
+def time_array_to_seconds(time_array):
+    """Convert an array of datetime.datetime objects into relative time in seconds 
+    """
+    time_array = np.array(time_array)
+    time_array = time_array - time_array[0]
+    time_array = time_array.astype('timedelta64[s]').astype(int)
+    return time_array
+
 def exp_summary(dict_desc):
     calling = dict_desc['calling']
     date = dict_desc['meta']['created']
@@ -92,14 +100,18 @@ for i, id in enumerate(sorted(idlist)):
     for j, cattype in enumerate(cattypes):
         # plot individual channels
         ax_graph = fig.add_subplot(gs[row_pc_vs_t, j])
+        max_pc = 0
         try:
             for ch, clr in zip(['C1', 'C4'],['blue', 'red']):
                 plot_query = f'{cattype}-{id}-{ch}'
                 dat2plot = rearr_datasets[plot_query]['data']
                 title = f'{cattype}-{id}'
                 pc = [fit['pc'] for fit in dat2plot['fit']]
-                time = np.linspace(0, 30-1/3, 90)[:len(pc)]
+                # time = np.linspace(0, 30-1/3, 90)[:len(pc)]
+                time = time_array_to_seconds(dat2plot['time'])
                 ax_graph.plot(time, pc, linewidth = 2, color = clr, label = ch)
+                max_pc = max(max_pc, max(pc))
+            ax_graph.set_ylim([0, max_pc * 1.1])
             ax_graph.legend()
         except KeyError:
             pass
@@ -112,7 +124,7 @@ for i, id in enumerate(sorted(idlist)):
             else:
                 title_clr = 'magenta'
             ax_graph.set_title(f'{title} ({calling})', color = title_clr)
-            ax_graph.set_ylim([0, 30])
+            # ax_graph.set_ylim([0, 45])
             ax_graph.set_xlabel('time (min)')
             ax_graph.set_ylabel('Current ($\mu$A)')
 
