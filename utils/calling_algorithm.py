@@ -478,10 +478,11 @@ class Normalize(BaseEstimator,TransformerMixin):
         return self
         
     def transformer(self,X):
-        
         time,pc = X
         f = np.abs(np.array(time) - self.from_).argmin()
-        t = np.abs(np.array(time) - self.to_).argmin()                
+        t = np.abs(np.array(time) - self.to_).argmin()
+        if f == t:
+            t = f+1                
         normalizer = max(self.q_(pc[f:t]), 1e-3)
         return time,np.array(pc)/normalizer
         

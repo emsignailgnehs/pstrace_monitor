@@ -30,101 +30,140 @@ Update Note:
 #### ╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚══════╝ ####
 #### Change this manually if running code in terminal.                      ####
 ################################################################################
-picklefile = r"C:\Users\hui\RnD\Projects\LAMP-Covid Sensor\Data Export\20220223\20220223 SL fresh vs store caps_ fresh vs stored sensors.picklez"
+picklefile = r"C:\Users\Public\Documents\SynologyDrive\Users\Sheng\SideProjects\20230316_CallingProblem\202303154ChannelFluBTest.picklez"
 #%% user end input
 
 
 if __name__ == '__main__':
-    picklefile = input('Enter picke file:\n').strip(' "')
+    # picklefile = input('Enter picke file:\n').strip(' "')
+    picklefiles_dir = input('Enter picke files directory:\n').strip(' "')
+    picklefiles = [str(x) for x in Path(picklefiles_dir).glob('*.picklez')]
+    savename = f'{picklefiles_dir}.json'
+    # print(picklefiles)
 
 #%% load data
-print(f'File you entered is: {picklefile}')
-print('reading data...')
-dataSource = ViewerDataSource()
-pickleFiles = [picklefile]
-dataSource.load_picklefiles(pickleFiles)
-
-X, y, names,devices = removeDuplicates(*dataSource.exportXy())
-
-
-print('Total curve count is : '+str(len(X)))
-print("Total Positive Data: "+str(sum(y)))
-print("Total Negative Data: "+str(len(y)-sum(y)))
-
-#%% Calculate
+# print(f'File you entered is: {picklefile}')
+# print('reading data...')
 cutoffEnds = [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-hCtT_vs_cutoffEnd = {}
-for cutoffEnd in cutoffEnds:
-    cutoffStart = 8
-    # cutoffEnd = 30
-    normStart = cutoffStart
-    normEnd = cutoffStart + 1
 
-    t0 = time.perf_counter()
-    print('Calculating...')
-    smoothT = Pipeline([
-        ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-        ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-        ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-        ('remove time', RemoveTime()),
-    ])
-    smoothed_X = smoothT.transform(X)
-
-    deriT = Pipeline([
-        ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-        ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-        ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-        ('Derivitive', Derivitive(window=31, deg=3)),
-        # ('remove time',RemoveTime()),
-    ])
-    deri_X = deriT.transform(X)
-
-    hCtT = Pipeline([
-        ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-        ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-        ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-        ('Derivitive', Derivitive(window=31, deg=3)),
-        ('peak', FindPeak()),
-        ('logCt',HyperCt()),
-        
-    ])
-    hCtT_X = hCtT.transform(X)
-
-    print(hCtT_X[0])
-
-    hCtTPredictT = Pipeline([
-        ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-        ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-        ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-        ('Derivitive', Derivitive(window=31, deg=3)),
-        ('peak', FindPeak()),
-        ('logCt',HyperCt()),
-        ('predictor',CtPredictor(ct=25,prominence=0,sd=0.1))
-    ])
-    hCtpred_X = hCtTPredictT.transform(X)
-
-    hCtT_vs_cutoffEnd[cutoffEnd] = {
-        'CT': [x[0] for x in hCtT_X],
-        'PR': [x[1] for x in hCtT_X],
-        'SD_3m': [x[-9] for x in hCtT_X],
-        'SD_5m': [x[-8] for x in hCtT_X],
-        'SD_10m': [x[-7] for x in hCtT_X],
-        'SD_15m': [x[-6] for x in hCtT_X],
-        'SD_END' : [x[-5] for x in hCtT_X],
+hCtT_vs_cutoffEnd = {
+    cutoffEnd: {
+        'CT': [],
+        'PR': [],
+        'SD_3m': [],
+        'SD_5m': [],
+        'SD_10m': [],
+        'SD_15m': [],
+        'SD_End': [],
     }
-    # hCtTPredictT = Pipeline([
-    #     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
-    #     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
-    #     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-    #     ('Derivitive', Derivitive(window=31, deg=3)),
-    #     ('peak', FindPeak()),
-    #     ('logCt',HyperCt()),
-    #     ('predictor',SdPrPredictor(prominence=0.2,sd=0.106382))
-    # ])
-    # hCtpred_X = hCtTPredictT.transform(X)
-    print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
+    for cutoffEnd in cutoffEnds
+}
 
-savename = picklefile.replace('.picklez', '_processed.json')
+for picklefile in picklefiles:
+    #%%
+    dataSource = ViewerDataSource()
+    pickleFiles = [picklefile]
+    dataSource.load_picklefiles(pickleFiles)
+
+    X, y, names,devices = removeDuplicates(*dataSource.exportXy())
+
+    name_data_pairing = {
+        name: [data]
+        for name, data in zip(names, X)
+    }
+
+    #%%
+
+    print('Total curve count is : '+str(len(X)))
+    print("Total Positive Data: "+str(sum(y)))
+    print("Total Negative Data: "+str(len(y)-sum(y)))
+
+    #%% Calculate
+    for cutoffEnd in cutoffEnds:
+
+        #%%
+        for name, X in name_data_pairing.items():
+
+            cutoffStart = 8
+            # cutoffEnd = 30
+            normStart = cutoffStart
+            normEnd = cutoffStart + 1
+
+            t0 = time.perf_counter()
+            print('Calculating...')
+            smoothT = Pipeline([
+                ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+                ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+                ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+                ('remove time', RemoveTime()),
+            ])
+            smoothed_X = smoothT.transform(X)
+
+            deriT = Pipeline([
+                ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+                ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+                ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+                ('Derivitive', Derivitive(window=31, deg=3)),
+                # ('remove time',RemoveTime()),
+            ])
+            deri_X = deriT.transform(X)
+
+            hCtT = Pipeline([
+                ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+                ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+                ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+                ('Derivitive', Derivitive(window=31, deg=3)),
+                ('peak', FindPeak()),
+                ('logCt',HyperCt()),
+                
+            ])
+            hCtT_X = hCtT.transform(X)
+
+            print(hCtT_X[0])
+
+            hCtTPredictT = Pipeline([
+                ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+                ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+                ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+                ('Derivitive', Derivitive(window=31, deg=3)),
+                ('peak', FindPeak()),
+                ('logCt',HyperCt()),
+                ('predictor',CtPredictor(ct=25,prominence=0,sd=0.1))
+            ])
+            hCtpred_X = hCtTPredictT.transform(X)
+
+        # hCtT_vs_cutoffEnd[cutoffEnd] = {
+        #     'CT': [x[0] for x in hCtT_X],
+        #     'PR': [x[1] for x in hCtT_X],
+        #     'SD_3m': [x[-9] for x in hCtT_X],
+        #     'SD_5m': [x[-8] for x in hCtT_X],
+        #     'SD_10m': [x[-7] for x in hCtT_X],
+        #     'SD_15m': [x[-6] for x in hCtT_X],
+        #     'SD_END' : [x[-5] for x in hCtT_X],
+        # }
+        # hCtTPredictT = Pipeline([
+        #     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
+        #     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
+        #     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
+        #     ('Derivitive', Derivitive(window=31, deg=3)),
+        #     ('peak', FindPeak()),
+        #     ('logCt',HyperCt()),
+        #     ('predictor',SdPrPredictor(prominence=0.2,sd=0.106382))
+        # ])
+        # hCtpred_X = hCtTPredictT.transform(X)
+        #%%
+        print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
+
+        for x in hCtT_X:
+            hCtT_vs_cutoffEnd[cutoffEnd]['CT'].append(x[0])
+            hCtT_vs_cutoffEnd[cutoffEnd]['PR'].append(x[1])
+            hCtT_vs_cutoffEnd[cutoffEnd]['SD_3m'].append(x[-9])
+            hCtT_vs_cutoffEnd[cutoffEnd]['SD_5m'].append(x[-8])
+            hCtT_vs_cutoffEnd[cutoffEnd]['SD_10m'].append(x[-7])
+            hCtT_vs_cutoffEnd[cutoffEnd]['SD_15m'].append(x[-6])
+            hCtT_vs_cutoffEnd[cutoffEnd]['SD_End'].append(x[-5])
+
+# savename = picklefile.replace('.picklez', '_processed.json')
 with open(savename, 'w') as f:
     json.dump(hCtT_vs_cutoffEnd, f, indent=4)
 # #%% Plot data and save to svg file
