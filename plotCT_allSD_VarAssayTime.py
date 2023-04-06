@@ -153,16 +153,16 @@ for picklefile in picklefiles:
         # ])
         # hCtpred_X = hCtTPredictT.transform(X)
         #%%
-        print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
+            print(f'Time taken to calculate {len(y)} data: {time.perf_counter()-t0:.3f} seconds.')
 
-        for x in hCtT_X:
-            hCtT_vs_cutoffEnd[cutoffEnd]['CT'].append(x[0])
-            hCtT_vs_cutoffEnd[cutoffEnd]['PR'].append(x[1])
-            hCtT_vs_cutoffEnd[cutoffEnd]['SD_3m'].append(x[-9])
-            hCtT_vs_cutoffEnd[cutoffEnd]['SD_5m'].append(x[-8])
-            hCtT_vs_cutoffEnd[cutoffEnd]['SD_10m'].append(x[-7])
-            hCtT_vs_cutoffEnd[cutoffEnd]['SD_15m'].append(x[-6])
-            hCtT_vs_cutoffEnd[cutoffEnd]['SD_End'].append(x[-5])
+            for x in hCtT_X:
+                hCtT_vs_cutoffEnd[cutoffEnd]['CT'].append(x[0])
+                hCtT_vs_cutoffEnd[cutoffEnd]['PR'].append(x[1])
+                hCtT_vs_cutoffEnd[cutoffEnd]['SD_3m'].append(x[-9])
+                hCtT_vs_cutoffEnd[cutoffEnd]['SD_5m'].append(x[-8])
+                hCtT_vs_cutoffEnd[cutoffEnd]['SD_10m'].append(x[-7])
+                hCtT_vs_cutoffEnd[cutoffEnd]['SD_15m'].append(x[-6])
+                hCtT_vs_cutoffEnd[cutoffEnd]['SD_End'].append(x[-5])
 
 # savename = picklefile.replace('.picklez', '_processed.json')
 with open(savename, 'w') as f:
