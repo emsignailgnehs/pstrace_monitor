@@ -373,10 +373,14 @@ class HyperCt(BaseEstimator,TransformerMixin):
         left_ips,peak_prominence,peak_width = X[0:3]
         tofit = findTimeVal(t,smoothed_c,t[0],left_ips - t[0])
         
-        fitres = least_squares(self.hyper,x0=[5,5,0.5],
-                    args=(np.linspace(t[0],left_ips,len(tofit)),tofit)
-                    )
-        fitpara = fitres.x
+        try:
+            fitres = least_squares(self.hyper,x0=[5,5,0.5],
+                        args=(np.linspace(t[0],left_ips,len(tofit)),tofit)
+                        )
+            fitpara = fitres.x
+        except TypeError as e:
+            print(f'TypeError: {e}')
+            fitpara = [5,5,0.5]
         
         thresholdpara = fitpara - np.array([0,0,(tofit[-1]) * offset])
         

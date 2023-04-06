@@ -83,6 +83,7 @@ for picklefile in picklefiles:
 
         #%%
         for name, X in name_data_pairing.items():
+            print(f'Processing {name}...')
 
             cutoffStart = 8
             # cutoffEnd = 30
