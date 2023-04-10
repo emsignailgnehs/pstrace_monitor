@@ -9,7 +9,7 @@ for run the viewr app along.
 
 
 if __name__ == "__main__":
-    matplotlib.use('TKAgg')
+    # matplotlib.use('TKAgg')
     app = TrainerApp()
     app.protocol('WM_DELETE_WINDOW',app.on_closing)
     app.mainloop()

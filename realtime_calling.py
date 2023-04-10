@@ -12,47 +12,96 @@ from utils.calling_algorithm import (
 from utils.realtime_caller import RealTimeCaller, CallerSimulator, RealTimeLinear
 from matplotlib.animation import FuncAnimation
 from functools import partial
+import re
 
+
+def remove_saliva_runs(X, y, names, devices):
+    new_X = []
+    new_y = []
+    new_names = []
+    new_dev = []
+    for (xi, yi, name, device) in zip(X, y, names, devices):
+        if "Saliva" in name.split(' '):
+            continue
+        new_X.append(xi)
+        new_y.append(yi)
+        new_names.append(name)
+        new_dev.append(device)
+    return new_X, new_y, new_names, new_dev
 
 
 def extract_data(file):
     dataSource = ViewerDataSource()
     pickleFiles = [file]
     dataSource.load_picklefiles(pickleFiles)
-    # return dataSource
-  
+    
+    # Sometimes picklez filename labelled with preheat time, sometimes
+    # inidiviual runs are
+    match = re.search(r"(\d+)min", file)
+    if match: all_preheattime = int(match.group(1))
+    
     concentrations = []
+    preheat_times  = []
     X, y, names,devices = removeDuplicates(*dataSource.exportXy())
+    X, y, names,devices = remove_saliva_runs(X, y, names, devices)
+    
     
     # Get virus loading from name
     for n, name in enumerate(names):
-        if 'NTC' in name:
-            concentrations.append(0)
+        if name.endswith('C4'):
             continue
-        l = name.split(' ')
-        for i, s in enumerate(l):
-            if 'cp/swab' in s:
-                if s == 'cp/swab':
-                    concentrations.append(l[i-1])
-                elif s.endswith('cp/swab'):
-                    concentrations.append(s.rstrip('cp/swab'))
-                else:
-                    print(f'Unrecognized concentration: {s}')
-        if len(concentrations) != (n+1):
-            print('failed to find concentration: ', name)
         
-        if (concentrations[-1] != 0 and y[n] == 0):
-            y[n] = 1
-        # print(y[n], concentrations[-1])
+        # Get preheat time
+        match = re.search(r"(\d+)\s*(?:min|s)", name)
+        if match: 
+            preheattime = int(match.group(1))
+        else:
+            # print('No preheat match, using filename ', all_preheattime)
+            preheattime = all_preheattime
+        if preheattime == 30: #labelled as s
+            preheattime = 0.5 # min
+            
+        # Get copies
+        match = re.search(r"\s(\S+)\s*cp\/swab", name)
+        if match: 
+            conc = match.group(1)
+        else:
+            if '1e4' in name:
+                conc = '1e4'
+            elif 'NTC' in name:
+                conc = 'NTC'
+           
+        
+        
+        to_num = { 0:0,
+                  '0': 0,
+                  'NTC': 0,
+                  '500': 500,
+                  '1000': 1000,
+                  '2e3': 2000,
+                  '2000': 2000,
+                  '4000':4000,
+                  '10000':10000,
+                  'e4': 10000,
+                  '1e4': 10000}
+              
+        
+        preheat_times.append(preheattime)
+        concentrations.append(to_num[conc])
         
     
-    to_num = {0:0,
-              '2e3': 2000,
-              'e4': 10000}
+    
+    
+    
     for i, c in enumerate(concentrations):
-        concentrations[i] = to_num[c]
+        if c == 0:
+            y[i] = 0
+        else:
+            y[i] = 1
+      
     
-    return X, y, names, concentrations, devices
+      
+    return X, y, names, concentrations, preheat_times, devices
 
 
 def run_with_plot(file, i = 13):  
@@ -64,18 +113,6 @@ def run_with_plot(file, i = 13):
     datastream = [(t[i], pc[i]) for i in range(0, len(t))]
             
     fig, ax = plt.subplots(figsize=(5,5), dpi=100)
-    # ax.set_ylim(0,50)
-    # ax.set_xlim(-1.5, 32)
-    # dataln, = ax.plot([],[], 'o')
-    # smoothln, = ax.plot([],[], '--', color='k', lw=2)
-    # derivln, = ax.plot([],[], '--', color='orange', lw=2)
-    # peakln,  = ax.plot([],[], '-', color='blue', lw=2)
-    # baseln,  = ax.plot([], [], '--', color='k', lw=1.5)
-    
-    # rtc = RealTimeCaller(datastream[0][0], datastream[0][1],
-    #                         dataln, smoothln, derivln, peakln, baseln)
-    
-
     ax.set_ylim(0, 2)
     ax.set_xlim(-1.5, 32)  
     ax.set_xlabel('Time/ min')
@@ -103,51 +140,6 @@ def run_with_plot(file, i = 13):
     return rtc, ani
 
 
-def run_all(files):
-    runners = []
-    for file in files:
-        X, y, names,devices = extract_data(file)
-    
-        for i, _ in enumerate(X):
-            runner = CallerSimulator(X[i], y[i], names[i], devices[i])
-            runners.append(runner)
-            runner.run()
-
-    true_pos  = []
-    true_neg  = []
-    false_pos = []
-    false_neg = []
-    for r in runners:
-        
-        if r.result: #realtime predicts positive
-            if r.y == '+':
-                true_pos.append(r)
-            elif r.y == '-':
-                false_pos.append(r)
-                
-        if not r.result: # Realtime predicts negative
-            if r.y == '+':
-                false_neg.append(r)
-            elif r.y == '-':
-                true_neg.append(r)
-    
-    total_pos = len(true_pos) + len(false_neg)
-    total_neg = len(true_neg) + len(false_pos)
-    
-    ts = []
-    for r in true_pos:
-        ts.append(r.call_time)
-    
-    print('')
-    print(f'===== EVALUATED {len(runners)} FILES =====')
-    print(f'Found {len(true_pos)}/{total_pos} positives.')
-    print(f'Found {len(true_neg)}/{total_neg} negatives.')
-    print(f'{len(false_pos)} false positives.')
-    print(f'{len(false_neg)} false negatives.')
-    print('')
-    print(f'Evaluated true positives in {np.mean(ts):0.2f} +- {np.std(ts):0.2f} min')
-
-    return runners, true_pos, true_neg, false_pos, false_neg
 
 
 def make_truth_table(earlycalls, ground_truth):
@@ -181,12 +173,13 @@ def make_truth_table(earlycalls, ground_truth):
 
 class Comparator:
     # compare realtime algorithm to full time algorithm
-    def __init__(self, X, y, name, conc, device, plot, kwargs):
+    def __init__(self, X, y, name, conc, preheat_time, device, plot, kwargs):
         # kwargs to pass to RealTimeCaller class
         self.X = X
         self.y = y
         self.name = name
         self.conc = conc
+        self.preheat_time = preheat_time
         self.device = device
         self.plot   = plot
         self.kwargs = kwargs
@@ -241,7 +234,8 @@ class Comparator:
             d[(r, s)] == 'False negative'):
             rtc = self.runner
             if self.plot:
-                rtc.make_plot(title=d[(r, s)])
+                rtc.make_plot(title=f'{self.name} {d[(r, s)]}',
+                              text=f'{self.conc} cp')
         
         # make truth table
         # ground truth = base algorithm
@@ -269,15 +263,24 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
     j = 0
     for file in glob.glob(folder + '/**', recursive=True):
         if file.endswith('.picklez'):
-            print(file)
             f = os.path.join(folder, file)
             data = extract_data(f)
-            X, y, names, concs, devices = data
+            X, y, names, concs, preheat_times, devices = data
             
             data_list = [l for l in zip(*data)]
-            for i, (X, y, name, conc, device) in enumerate(data_list):
+            for i, (X, y, name, conc, preheat_time, 
+                    device) in enumerate(data_list):
+                
+                # Filter to only analyze certain data
+                # if preheat_time != 5:
+                #     continue
+                if conc != 10000:
+                    continue
+                
+                print(y, conc, name)
+                
                 if j > n: break
-                comp = Comparator(X, y, name, conc, device, 
+                comp = Comparator(X, y, name, conc, preheat_time, device, 
                                   plot_mismatch, kwargs)
                 res, truth_table, call_time = comp.compare()
                 if summed_table is None:
@@ -295,11 +298,13 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
                     bads.append((f, i, comp))
                     # print('')
                     # print(f'false negative {file}')
+                    print(f'false negative {comp.conc}')
                     # print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
                 if res == 'False positive':
                     bads.append((f, i, comp))
                     # print('')
                     # print(f'false positive {file}')
+                    print(f'false positive {comp.conc}')
                     # print(f'Call time {call:0.2f}, Sd: {sd:0.2f}, Ct:{ct:0.2f}')                 
                 j += 1
                 
@@ -316,71 +321,63 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
 
 
 
-def compare_params(folder):
-    Ct_thresh = [20,25]
-    Sd_thresh = [0.1, 0.11, 0.12]
-    st = [3,5,7]
-    et = [8,10,12]
-    
-    for Ct in Ct_thresh:
-        for Sd in Sd_thresh:
-            print(f'====== Ct_thresh = {Ct}, Sd_thresh = {Sd} ======')
-            kwargs = {'Ct_thresh':Ct, 'Sd_thresh': Sd}
-            compare_all(folder, kwargs=kwargs)
-            print('')
-  
-            
-def scatterplot(d):
-    
-    comps = []
-    for key, l in d.items():
-        for _,_,_,_, comp in l:
-            comps.append((key, comp))
-    
-    
-    
-    fig, ax = plt.subplots(figsize=(10,10))
-    for (key,comp) in comps:
-        d = comp.realtime_pred
-        d2 = comp.standard_pred
-        Ct, Sd, rt_call = d['Ct'], d['Sd'], d['res']
-        st_Ct, st_Sd, st_call = d2['Ct'], d2['Sd'], d2['res']
-        
-        if rt_call == st_call == True: color = 'green'
-        if rt_call == st_call == False: color= 'darkgreen'
-        if rt_call == True and st_call == False: color = 'darkred'
-        if rt_call == False and st_call == True: color = 'red'
-        
-        ax.scatter(st_Ct, Ct, color = color)
-    ax.set_xlabel('Standard')
-    ax.set_ylabel('Realtime')
-    ax.axvline(20)
-    ax.axhline(20)
-    # ax.set_xlim(0, 26)
-    # ax.set_ylim(-0.1, 1)
-        
-    return
-
-
 
 def calltime_histogram(d, title, name):
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5,5), dpi=150)
     bins = np.arange(7, 30, 1)
+    last_heights = np.array([0 for _ in bins][:-1])
     
     true_pos  = []
     false_pos = []
     
     for _,_,_,_,_, comp in d['True positive']:
-        true_pos.append(comp.runner.call_time)
+        true_pos.append( (comp.runner.call_time,
+                          comp.preheat_time) )
         
     for _,_,_,_,_, comp in d['False positive']:
         false_pos.append(comp.runner.call_time)   
     
-    ax.hist(true_pos, bins=bins, rwidth=0.9, histtype='barstacked')
-    ax.hist(false_pos, bins=bins, rwidth=0.9, histtype='barstacked', color='red')
+    # Color by concentration
+    concs = set([conc for _, conc in true_pos if conc != 0])
+    concs = sorted(list(concs))  
+        
+    def color(cp):
+        maximum = 5
+        x = 0.3 + 0.7*float(cp)/maximum
+        arr = plt.cm.Greens(np.linspace(x,x,1))
+        return arr[0]
+    
+    for i, conc in enumerate(concs):
+        l = [ct for (ct, c) in true_pos if int(c) == int(conc)]
+        if len(l) == 0: continue
+        # Make histogram of just this concentraiton
+        titlestring = f'N={len(l)}, {np.mean(l):0.2f} +- {np.std(l):0.2f} min'
+        subfig, subax = plt.subplots(figsize=(5,5), dpi=150)
+        subax.hist(l, bins=bins, rwidth=0.9, color=color(conc),
+                   label=f'{conc} min')
+        subax.set_xlabel('Call time/ min')
+        subax.set_ylabel('Count')
+        subax.set_title(titlestring)
+        subax.legend()
+        
+        # Plot to overlay histogram
+        heights, locs = np.histogram(l, bins=bins)
+        locs = locs[:-1]
+        ax.bar(locs, heights, bottom=last_heights, color=color(conc),
+               label=f'{conc} min')
+        last_heights += heights
+        
+        
+    
+    # Plot false negatives to overlay
+    heights, locs = np.histogram(false_pos, bins=bins)
+    locs = locs[:-1]
+    ax.bar(locs, heights, bottom = last_heights, color='red')
+    
     ax.set_xlabel('Call time/ min')
     ax.set_ylabel('Count')
     ax.set_title(title)
+    ax.legend()
     # plt.show()
     # fname = os.path.join(r'C:\SynologyDrive\Brian\Calling algorithm\realtime calling data\varying SD histograms', 
     #                      name +'.png')
@@ -412,7 +409,7 @@ if __name__ == '__main__':
                           columns = ['17.5', '20.0', '22.5', '25.0', '27.5', '30.0'])
         print('')
         print(df)
-        calltime_histogram(d, f'Threshold = {thresh}', name=str(int(100*thresh)))
+        calltime_histogram(d, f'', name=str(int(100*thresh)))
         print('')
         print('')
         

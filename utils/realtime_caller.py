@@ -385,8 +385,8 @@ class RealTimeLinear:
         self.R2     = 0
 
         self.offset     = kwargs.get('offset', 0.05)
-        self.st         = kwargs.get('st', 8)
-        self.et         = kwargs.get('et', 12)
+        self.st         = kwargs.get('st', 10)
+        self.et         = kwargs.get('et', 15)
         self.Ct_thresh  = kwargs.get('Ct_thresh', 100)
         self.Sd_thresh  = kwargs.get('Sd_thresh', 0.1)
         
@@ -448,70 +448,6 @@ class RealTimeLinear:
        
         return *self.lines, 
         
-
-    def thresholding_algo(self, n=7, m = 7):
-
-        ### Use linear n point baseline trailing by m points ###
-        
-        if self.call_time != 0:
-            # Already called positive, don't update the baseline
-            # Update self.threshold for drawing
-            self.threshold = self.m * np.array(self.t) + self.b
-            return
-        
-        i = len(self.y) - m
-        if i <= n:
-            return
-                
-        # Approximate linear fit
-        idxs = np.arange(i-n, i).astype(int)
-        lb, rb = min(idxs), max(idxs)
-        
-        m = np.mean([self.y[j] - self.y[j-1] for j in idxs])
-        m /= np.mean([self.t[j] - self.t[j-1] for j in idxs])
-        b = np.mean([self.y[j] - m*self.t[j] for j in idxs])
-        
-        
-        # Check R^2 from 5-10 min
-        if self.t[-1] < self.st:
-            return
-        
-        st = self.st
-        if self.t[-1] >= self.et:
-            et = self.et
-        else:
-            et = self.t[-1]
-        # 
-        idxs, ts = get_range(self.t, st, et)
-        lb, rb = idxs[0], idxs[-1]
-        
-        thresh = m*np.array(self.t[lb:rb]) + b
-        data = np.array(self.y[lb:rb])
-        R2 = 1 - np.sum( (thresh - data)**2 )
-        
-        
-        # Choose which fit to save
-        if (self.m is None):
-            # First fit
-            self.m = m
-            self.b = b
-            self.bounds = [lb, rb]
-            self.R2 = R2
-        if not self.flag:
-            self.m = m
-            self.b = b
-            self.bounds = [lb, rb]
-            self.R2 = R2
-
-        
-        self.threshold = m * np.array(self.t) + b
-        
-        if self.y[i] < (1-0.02)*self.threshold[i]:
-            # if not self.crossed:
-            self.left_ips = i
-            self.crossed = True
-    
-        return
     
     def thresholding_algo(self, n=10):
 
@@ -563,6 +499,11 @@ class RealTimeLinear:
             self.R2 = R2
         
         # if R2 >= 0.95 * self.R2:
+        # if ( (abs(m) < abs(self.m) and
+        #       R2 > 0.95* self.R2) 
+        #     or 
+        #     (R2 > self.R2)):
+            
         if ((abs(m) < abs(self.m)) or
             b < self.b or
             R2 > self.R2):
@@ -640,20 +581,21 @@ class RealTimeLinear:
                 self.flag = True
                 self.call_Sd = self.Sd
                 self.call_time = self.t[-1]
-                print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
+                # print(f'Called positive. t={self.t[-1]:0.2f}, Ct={self.Ct:0.2f}, Sd={self.Sd:0.2f}')
         else:
             self.result = False
         return
     
     
-    def make_plot(self, title=''):        
-        fig, ax = plt.subplots(figsize=(10,10))
+    def make_plot(self, title='', text=''):        
+        fig, ax = plt.subplots(figsize=(5,5), dpi=150)
         ax.set_title(title)
         ax.set_ylim(0, 2)
         ax.set_xlim(-1.5, 32)
         self.dataln, = ax.plot([],[], 'o')
         self.threshln, = ax.plot([],[], '--', color='k', lw=2)
         ax.axvline(self.call_time)
+        ax.text(2, 1.85, text, fontsize='large', color='red')
         
         self.update_lines()
         
@@ -691,6 +633,11 @@ class CallerSimulator(RealTimeLinear):
                 if (t >= call_time and
                     self.earlycalls[call_time] is None):
                     self.earlycalls[call_time] = self.result
+        
+        # Fill out rest of early calls table if run stopped early
+        for call_time in early_call_times:
+            if self.earlycalls[call_time] is None:
+                self.earlycalls[call_time] = self.result
             
         
 
