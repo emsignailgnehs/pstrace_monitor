@@ -35,73 +35,37 @@ def extract_data(file):
     pickleFiles = [file]
     dataSource.load_picklefiles(pickleFiles)
     
-    # Sometimes picklez filename labelled with preheat time, sometimes
-    # inidiviual runs are
-    match = re.search(r"(\d+)min", file)
-    if match: all_preheattime = int(match.group(1))
     
-    concentrations = []
-    preheat_times  = []
+    # Parse filename to get experiment conditions
+    
+    mxs = {'1NM': '1X NM',
+           '01NM': '0.1X NM'}    
+    
+    l = file.split('-')
+    matrix = l[1]
+    matrix = mxs.get(matrix, matrix)
+    cp = l[2].replace('.picklez', '')
+    
     X, y, names,devices = removeDuplicates(*dataSource.exportXy())
-    X, y, names,devices = remove_saliva_runs(X, y, names, devices)
-    
+
+    matrices       = []
+    concentrations = []    
+        
     
     # Get virus loading from name
     for n, name in enumerate(names):
-        if name.endswith('C4'):
-            continue
         
-        # Get preheat time
-        match = re.search(r"(\d+)\s*(?:min|s)", name)
-        if match: 
-            preheattime = int(match.group(1))
-        else:
-            # print('No preheat match, using filename ', all_preheattime)
-            preheattime = all_preheattime
-        if preheattime == 30: #labelled as s
-            preheattime = 0.5 # min
-            
-        # Get copies
-        match = re.search(r"\s(\S+)\s*cp\/swab", name)
-        if match: 
-            conc = match.group(1)
-        else:
-            if '1e4' in name:
-                conc = '1e4'
-            elif 'NTC' in name:
-                conc = 'NTC'
-           
-        
-        
-        to_num = { 0:0,
-                  '0': 0,
-                  'NTC': 0,
-                  '500': 500,
-                  '1000': 1000,
-                  '2e3': 2000,
-                  '2000': 2000,
-                  '4000':4000,
-                  '10000':10000,
-                  'e4': 10000,
-                  '1e4': 10000}
-              
-        
-        preheat_times.append(preheattime)
-        concentrations.append(to_num[conc])
-        
-    
-    
-    
+        matrices.append(matrix)
+        concentrations.append(cp)
     
     for i, c in enumerate(concentrations):
-        if c == 0:
+        if (c == 0) or (c == 'NTC'):
             y[i] = 0
         else:
             y[i] = 1
-      
-    
-      
-    return X, y, names, concentrations, preheat_times, devices
+
+    return X, y, names, concentrations, matrices, devices
+
 
 
 def run_with_plot(file, i = 13):  
@@ -274,10 +238,10 @@ def compare_all(folder, n=20000, plot_mismatch=False, kwargs={}):
                 # Filter to only analyze certain data
                 # if preheat_time != 5:
                 #     continue
-                if conc != 10000:
-                    continue
+                # if conc != 10000:
+                #     continue
                 
-                print(y, conc, name)
+                # print(y, conc, name)
                 
                 if j > n: break
                 comp = Comparator(X, y, name, conc, preheat_time, device, 
@@ -342,19 +306,28 @@ def calltime_histogram(d, title, name):
     concs = sorted(list(concs))  
         
     def color(cp):
-        maximum = 5
-        x = 0.3 + 0.7*float(cp)/maximum
-        arr = plt.cm.Greens(np.linspace(x,x,1))
-        return arr[0]
+        # maximum = 5
+        # x = 0.3 + 0.7*float(cp)/maximum
+        # arr = plt.cm.Greens(np.linspace(x,x,1))
+        # return arr[0]
+    
+        if cp == '0.1X NM':
+            return 'limegreen'
+        if cp == '1X NM':
+            return 'darkgreen'
+        if cp == 'NTC':
+            return 'blue'
+        
+        
     
     for i, conc in enumerate(concs):
-        l = [ct for (ct, c) in true_pos if int(c) == int(conc)]
+        l = [ct for (ct, c) in true_pos if c == conc]
         if len(l) == 0: continue
         # Make histogram of just this concentraiton
         titlestring = f'N={len(l)}, {np.mean(l):0.2f} +- {np.std(l):0.2f} min'
         subfig, subax = plt.subplots(figsize=(5,5), dpi=150)
         subax.hist(l, bins=bins, rwidth=0.9, color=color(conc),
-                   label=f'{conc} min')
+                   label=f'{conc}')
         subax.set_xlabel('Call time/ min')
         subax.set_ylabel('Count')
         subax.set_title(titlestring)
@@ -397,9 +370,9 @@ if __name__ == '__main__':
     # folder = r'C:\Users\Elmer Guzman\Desktop\covid sensor data'
     
     # New data:
-    folder = r'C:\SynologyDrive\Brian\Calling algorithm\New collected data'
-    # for thresh in [0.1, 0.08, 0.06, 0.04, 0.02, 0.01]:
-    for thresh in [0.1]:
+    folder = r'C:\SynologyDrive\Brian\Calling algorithm\Nasal matrix data'
+    for thresh in [0.1, 0.08, 0.06]:
+    # for thresh in [0.1]:
         print(f' ==== Threshold = {thresh} ====')
         print('')
         d, bads, comp, tt = compare_all(folder,
