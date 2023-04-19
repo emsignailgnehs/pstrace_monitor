@@ -13,6 +13,16 @@ from utils.realtime_caller import RealTimeCaller, CallerSimulator, RealTimeLinea
 from matplotlib.animation import FuncAnimation
 from functools import partial
 import re
+'''
+Functions for analyzing previously-collected data using the real time calling
+algorithm.
+
+Relies on CallerSimulator class from utils.realtime_caller, which feeds data
+points to the algorithm 1 point at a time and asks for a positive/negative call.
+
+Other functions mainly to scrape data from files, parse experimental parameters,
+and plot results.
+'''
 
 
 def remove_saliva_runs(X, y, names, devices):
@@ -69,6 +79,9 @@ def extract_data(file):
 
 
 def run_with_plot(file, i = 13):  
+    '''
+    Animates a single experiment of data to visualize calling algorithm.
+    '''
     X, y, names, concs, devices = extract_data(file)
 
     X = X[i]
@@ -106,7 +119,23 @@ def run_with_plot(file, i = 13):
 
 
 
-def make_truth_table(earlycalls, ground_truth):
+def make_truth_table(earlycalls:dict, ground_truth:bool):
+    '''
+    Make a table showing true/ false results at various cutoff times.
+    
+    earlycalls   = {'15 min': 0, '20 min': 0, '25 min': 1}
+    ground_truth = 1    #actual positive test
+    
+                 15 min     20 min     25 min
+    True pos         0           0          1
+    True neg         0           0          0
+    False pos        0           0          0
+    False neg        1           1          0
+    
+    ^^^ Interpret as, this experiment is a false negative unless we wait 25 min
+    to see the positive result
+    
+    '''
     def comp(val, truth, category):
         if category == 'true pos':
             if val == truth == 1:
