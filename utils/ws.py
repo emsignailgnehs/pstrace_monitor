@@ -9,7 +9,7 @@ And automate update tasks on multiple devices.
 class WSClient:
     def __init__(self,deviceID,app):
         self.id = deviceID
-        self.wsAddr = f'ws://{deviceID}.local:8765'
+        self.wsAddr = f'ws://{deviceID}:8765'
         self.app = app
         self.con = None
         for i in range(3):            
