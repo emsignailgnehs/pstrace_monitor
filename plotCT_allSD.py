@@ -49,8 +49,11 @@ print("Total Positive Data: "+str(sum(y)))
 print("Total Negative Data: "+str(len(y)-sum(y)))
 
 #%% Calculate
-cutoffStart = 8
-cutoffEnd = 30
+assay_length = 25
+preheat_length = 3
+cutoff_length = 5
+cutoffStart = preheat_length + cutoff_length
+cutoffEnd = assay_length + preheat_length
 normStart = cutoffStart
 normEnd = cutoffStart + 1
 
@@ -68,7 +71,7 @@ deriT = Pipeline([
     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-    ('Derivitive', Derivitive(window=31, deg=3)),
+    ('Derivitive', Derivitive2(window=31, deg=3)),
     # ('remove time',RemoveTime()),
 ])
 deri_X = deriT.transform(X)
@@ -79,7 +82,7 @@ hCtT = Pipeline([
     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-    ('Derivitive', Derivitive(window=31, deg=3)),
+    ('Derivitive', Derivitive2(window=31, deg=3)),
     ('peak', FindPeak()),
     ('logCt',HyperCt()),
     
@@ -90,7 +93,7 @@ hCtTPredictT = Pipeline([
     ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
     ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
     ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-    ('Derivitive', Derivitive(window=31, deg=3)),
+    ('Derivitive', Derivitive2(window=31, deg=3)),
     ('peak', FindPeak()),
     ('logCt',HyperCt()),
     ('predictor',CtPredictor(ct=25,prominence=0,sd=0.1))
@@ -140,7 +143,7 @@ if row > 1:
 
 for i,j in enumerate(y):
     ax = axes[i]
-    ax.set_ylim([0.3,1.5])
+    # ax.set_ylim([0.3,1.5])
     
     smoothed_c = smoothed_X[i]
     t,deri,_ =  deri_X[i]
