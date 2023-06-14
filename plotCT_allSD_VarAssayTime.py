@@ -61,6 +61,7 @@ hCtT_vs_cutoffEnd = {
 
 for picklefile in picklefiles:
     #%%
+    print(f'File you entered is: {picklefile}')
     dataSource = ViewerDataSource()
     pickleFiles = [picklefile]
     dataSource.load_picklefiles(pickleFiles)
@@ -113,7 +114,7 @@ for picklefile in picklefiles:
                 ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
                 ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
                 ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-                ('Derivitive', Derivitive(window=31, deg=3)),
+                ('Derivitive', Derivitive2(window=31, deg=3)),
                 ('peak', FindPeak()),
                 ('logCt',HyperCt()),
                 
@@ -126,7 +127,7 @@ for picklefile in picklefiles:
                 ('smooth', Smoother(stddev=2, windowlength=11, window='hanning')),
                 ('normalize', Normalize(mode='mean', normalizeRange=(normStart, normEnd))),
                 ('truncate', Truncate(cutoffStart=cutoffStart, cutoffEnd=cutoffEnd, n=90)),
-                ('Derivitive', Derivitive(window=31, deg=3)),
+                ('Derivitive', Derivitive2(window=31, deg=3)),
                 ('peak', FindPeak()),
                 ('logCt',HyperCt()),
                 ('predictor',CtPredictor(ct=25,prominence=0,sd=0.1))
