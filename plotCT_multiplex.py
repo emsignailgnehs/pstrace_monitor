@@ -9,7 +9,7 @@ from itertools import combinations
 import time
 from pathlib import Path
 import json
-from tkinter import Tk     # from tkinter import Tk for Python 3.x
+from tkinter import Tk, simpledialog     # from tkinter import Tk for Python 3.x
 from tkinter.filedialog import askopenfilename
 import re
 import matplotlib.gridspec as gridspec
@@ -19,24 +19,35 @@ from utils._util import ViewerDataSource
 from utils.calling_algorithm import *
 from utils.calling_algorithm import _version
 
+root = Path(__file__).parent
+
 #%%
 """Get config file and pickle file locations with a GUI"""
-# Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
-# config_file = askopenfilename(title= 'open config file') # show an "Open" dialog box and return the path to the selected file
-# print(f'config file location:\n\t{config_file}\n')
-# print('-' * 40)
+Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
+# show an "Open" dialog box and return the path to the selected file
+config_file = askopenfilename(
+    title= 'open config file',
+    filetypes=[('json files', '*.json')],
+    initialdir= root
+)
+print(f'config file location:\n\t{config_file}\n')
+print('-' * 40)
 
-# Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
-# picklefile = askopenfilename(title= 'open .picklez file') # show an "Open" dialog box and return the path to the selected file
-# print(f'pickle file location:\n\t{picklefile}\n')
-# print('-' * 40)
+Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
+# show an "Open" dialog box and return the path to the selected file
+picklefile = askopenfilename(
+    title= 'open .picklez file',
+    filetypes=[('picklez files', '*.picklez')],
+    initialdir= root
+)
+print(f'pickle file location:\n\t{picklefile}\n')
+print('-' * 40)
 
-config_file = r"C:\Users\Public\Documents\SynologyDrive\Users\Sheng\SideProjects\pstrace_monitor\plotCT_multiplex\config.json"
-picklefile = r"c:\Users\Public\Documents\SynologyDrive\Users\Sheng\SideProjects\20230727-AlgorithmTraining\FluA-NTC.picklez"
+# config_file = r"C:\Users\Public\Documents\SynologyDrive\Users\Sheng\SideProjects\pstrace_monitor\plotCT_multiplex\config.json"
+# picklefile = r"c:\Users\Public\Documents\SynologyDrive\Users\Sheng\SideProjects\20230727-AlgorithmTraining\FluA-NTC.picklez"
 
 #%%
 """Load config file"""
-root = Path(__file__).parent
 with open(config_file) as f:
     config = json.load(f)
 assay_config = config['assay_config']
