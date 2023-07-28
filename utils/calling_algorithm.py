@@ -160,7 +160,7 @@ class Smoother(BaseEstimator,TransformerMixin):
         return self 
     def transformer(self,X):
         t,pc = X
-        t,pc = reject_outliers(t,pc,stddev=self.stddev)
+        # t,pc = reject_outliers(t,pc,stddev=self.stddev)
         pc = smooth(pc,windowlenth=self.windowlength,window=self.window)
         return [t,pc]
     def transform(self,X,y=None):        
@@ -252,7 +252,7 @@ class FindPeak(BaseEstimator,TransformerMixin):
             
             # calculate threshold Ct
             
-        return [left_ips,peak_prominence*100,peak_width,sdAtRightIps,sdAt3min,sdAt5min,sdAt10min,sdAt15min,sdAtEnd,t,gradient,pc]
+        return [left_ips,peak_prominence*100,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd,t,gradient,pc]
         
     def transform(self,X,y=None):        
         # return np.apply_along_axis(self.transformer,1,X,)
@@ -393,7 +393,22 @@ class HyperCt(BaseEstimator,TransformerMixin):
             if sthre > 0:
                 break
             thresholdCt = sT
-        return  [*X[0:-3],*thresholdpara,left_ips]
+
+        left_ips,peak_prominence,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd = X[0:-3]
+        
+        return [
+            {
+                'left_ips':left_ips,
+                'peak_prominence':peak_prominence,
+                'peak_width':peak_width,
+                'sdAtRightIps':sdAtRightIps,
+                'sdAt5min':sdAt5min,
+                'sdAt10min':sdAt10min,
+                'sdAtEnd':sdAtEnd,
+            },
+            *thresholdpara,
+            left_ips
+        ]
           
     def transform(self,X,y=None):        
         return np.array([self.transformer(i) for i in X])
@@ -434,7 +449,19 @@ class CtPredictor(BaseEstimator,TransformerMixin):
         """
         return 0,1 flag, thresholdCt, prominence, signal drop at 5min
         """
-        return int(x[-1]<=self.ct and x[1]>=self.prominence and x[8]>=self.sd),x[-1],x[1],x[5]
+        calc_result = x[0]
+        calc_ct = calc_result['left_ips']
+        calc_prominence = calc_result['peak_prominence']
+        calc_sdAt5min = calc_result['sdAt5min']
+        calc_sdAt10min = calc_result['sdAt10min']
+        calc_sdAtEnd = calc_result['sdAtEnd']
+        return {
+            'prediction': int(calc_ct<=self.ct and calc_prominence>=self.prominence and calc_sdAt10min>=self.sd),
+            'ct': calc_ct,
+            'sdAt5min': calc_sdAt5min,
+            'sdAt10min': calc_sdAt10min,
+            'sdAtEnd': calc_sdAtEnd
+        }
         
     def transform(self,X,y=None):        
         return np.apply_along_axis(self.transformer,1,X)
