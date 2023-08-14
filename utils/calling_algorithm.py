@@ -212,24 +212,30 @@ class FindPeak(BaseEstimator,TransformerMixin):
     def fit(self,X,y=None):
         return self 
     
-    def transformer(self,X):
-        
+    def transformer(self,X):        
         t,gradient,pc = X
         heightlimit = np.quantile(np.absolute(gradient[0:-1] - gradient[1:]), self.heightlimit)
         peaks,props = signal.find_peaks(gradient,prominence=heightlimit,width= len(gradient) * self.widthlimit, rel_height=0.5)
-        
-        
-        peak_pos,left_ips,peak_prominence,peak_width = (t[-1],t[-1],0,0)
-        sdAtRightIps,sdAt3min,sdAt5min,sdAt10min,sdAt15min,sdAtEnd = (0,0,0,0,0,0)
+
+        sd_times = range(1, int(t[-1]))
+        output = {f'sdAt{sd_time}min': 0 for sd_time in sd_times}
+        output['X'] = X
+        output['left_ips'] = t[-1]
+        output['peak_prominence'] = 0
+        output['peak_width'] = 0
+        output['sdAtRightIps'] = 0
+        output['sdAtEnd'] = 0
+        # peak_pos,left_ips,peak_prominence,peak_width = (t[-1],t[-1],0,0)
+        # sdAtRightIps,sdAt3min,sdAt5min,sdAt10min,sdAt15min,sdAtEnd = (0,0,0,0,0,0)
         if len(peaks) != 0:            
         # most prominent peak in props 
             tspan = t[-1]-t[0]
             normalizer =  tspan / len(gradient) 
             maxpeak_index = props['prominences'].argmax()
-            peak_pos = peaks[maxpeak_index] * normalizer + t[0]
-            peak_prominence = props['prominences'][maxpeak_index] 
-            peak_width = props['widths'][maxpeak_index] * normalizer 
-            left_ips = props['left_ips'][maxpeak_index] * normalizer  + t[0]
+            # peak_pos = peaks[maxpeak_index] * normalizer + t[0]
+            output['peak_prominence'] = props['prominences'][maxpeak_index] * 100
+            output['peak_width'] = props['widths'][maxpeak_index] * normalizer 
+            output['left_ips'] = props['left_ips'][maxpeak_index] * normalizer  + t[0]
 
             pcMaxIdx = len(pc) - 1
 
@@ -238,113 +244,117 @@ class FindPeak(BaseEstimator,TransformerMixin):
             sStart = pc[startPosition]
             # find signal drop at different positions:
             # sigal drop at peak_width 
-            sdAtRightIps = sStart - pc[min(int(props['right_ips'][maxpeak_index]), pcMaxIdx)]
-            # signal drop at 3 min later
-            sdAt3min = sStart - pc[min(startPosition + int(3 / normalizer), pcMaxIdx)]
-            # signal drop at 5 min later
-            sdAt5min = sStart - pc[min(startPosition + int(5 / normalizer), pcMaxIdx)]
-            # signal drop at 10 min later
-            sdAt10min = sStart - pc[min(startPosition + int(10 / normalizer), pcMaxIdx)]
-            # siganl drop at 15 min later
-            sdAt15min = sStart - pc[min(startPosition + int(15 / normalizer), pcMaxIdx)]
-            # signal drop at end       
-            sdAtEnd = sStart - pc[-1]            
+            output['sdAtRightIps'] = sStart - pc[min(int(props['right_ips'][maxpeak_index]), pcMaxIdx)]
+            output['sdAtEnd'] = sStart - pc[-1]
+
+            for sd_time in sd_times:
+                output[f'sdAt{sd_time}min'] = sStart - pc[min(startPosition + int(sd_time / normalizer), pcMaxIdx)]
+            # # signal drop at 3 min later
+            # sdAt3min = sStart - pc[min(startPosition + int(3 / normalizer), pcMaxIdx)]
+            # # signal drop at 5 min later
+            # sdAt5min = sStart - pc[min(startPosition + int(5 / normalizer), pcMaxIdx)]
+            # # signal drop at 10 min later
+            # sdAt10min = sStart - pc[min(startPosition + int(10 / normalizer), pcMaxIdx)]
+            # # siganl drop at 15 min later
+            # sdAt15min = sStart - pc[min(startPosition + int(15 / normalizer), pcMaxIdx)]
+            # # signal drop at end       
+            # sdAtEnd = sStart - pc[-1]            
             
             # calculate threshold Ct
             
-        return [left_ips,peak_prominence*100,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd,t,gradient,pc]
+        return output
         
     def transform(self,X,y=None):        
         # return np.apply_along_axis(self.transformer,1,X,)
         return np.array([self.transformer(i) for i in X],dtype='object')
 
-class ThresholdCt(BaseEstimator,TransformerMixin):
-    "calculate the Ct from threshold method,this should always come after findPeak"
-    def __init__(self,degree=1,fitwindow=4,offset=0.05):
-        """
-        degree is the polyfit degree of fitting,
-        fitwindow is how many minutes aheat should the algorithm fit to
-        offset is how much the fitted curve shifts down. this is in relative scale to the intial fitting point.
-        """
-        self.degree = degree
-        self.fitwindow=fitwindow
-        self.offset = offset
+# class ThresholdCt(BaseEstimator,TransformerMixin):
+#     "calculate the Ct from threshold method,this should always come after findPeak"
+#     def __init__(self,degree=1,fitwindow=4,offset=0.05):
+#         """
+#         degree is the polyfit degree of fitting,
+#         fitwindow is how many minutes aheat should the algorithm fit to
+#         offset is how much the fitted curve shifts down. this is in relative scale to the intial fitting point.
+#         """
+#         self.degree = degree
+#         self.fitwindow=fitwindow
+#         self.offset = offset
                 
-    def fit(self,X,y=None):        
-        return self    
-    def transformer(self,X):
-        fitwindow = self.fitwindow
-        degree = self.degree
-        offset = self.offset
-        t,deri,smoothed_c = X[-3:]
-        left_ips,peak_prominence,peak_width = X[0:3]
-        tofit = findTimeVal(t,smoothed_c,left_ips-fitwindow,fitwindow)
-        fitpara = np.polyfit(np.linspace(max(left_ips-fitwindow,t[0]),left_ips,len(tofit)),np.array(tofit,dtype=float),deg=degree)        
-        threshold = (tofit[-1]) * offset
-        thresholdpara = fitpara + np.array( [0]*degree +[-threshold])
-        thresholdline = np.poly1d(thresholdpara) 
-        tosearch = findTimeVal(t,smoothed_c,left_ips,t[-1])
-        tosearchT = np.linspace(left_ips,t[-1],len(tosearch))
-        thresholdSearch = thresholdline(tosearchT) - tosearch
-        thresholdCt = left_ips
-        for sT,sthre in zip(tosearchT,thresholdSearch):        
-            if sthre > 0:
-                break
-            thresholdCt = sT
-        return  [*X[0:-3],*thresholdpara,thresholdCt]
+#     def fit(self,X,y=None):        
+#         return self    
+#     def transformer(self,X):
+#         fitwindow = self.fitwindow
+#         degree = self.degree
+#         offset = self.offset
+#         t,deri,smoothed_c = X[-3:]
+#         left_ips,peak_prominence,peak_width = X[0:3]
+#         tofit = findTimeVal(t,smoothed_c,left_ips-fitwindow,fitwindow)
+#         fitpara = np.polyfit(np.linspace(max(left_ips-fitwindow,t[0]),left_ips,len(tofit)),np.array(tofit,dtype=float),deg=degree)        
+#         threshold = (tofit[-1]) * offset
+#         thresholdpara = fitpara + np.array( [0]*degree +[-threshold])
+#         thresholdline = np.poly1d(thresholdpara) 
+#         tosearch = findTimeVal(t,smoothed_c,left_ips,t[-1])
+#         tosearchT = np.linspace(left_ips,t[-1],len(tosearch))
+#         thresholdSearch = thresholdline(tosearchT) - tosearch
+#         thresholdCt = left_ips
+#         for sT,sthre in zip(tosearchT,thresholdSearch):        
+#             if sthre > 0:
+#                 break
+#             thresholdCt = sT
+#         return  [*X[0:-3],*thresholdpara,thresholdCt]
           
-    def transform(self,X,y=None):        
-        return np.array([self.transformer(i) for i in X])
+#     def transform(self,X,y=None):        
+#         return np.array([self.transformer(i) for i in X])
     
-class LogCt(BaseEstimator,TransformerMixin):
-    "calculate the Ct from threshold method,this should always come after findPeak"
-    def __init__(self,degree=1,fitwindow=4,offset=0.05):
-        """
-        degree is the polyfit degree of fitting,
-        fit on the log values of the curve
-        fitwindow is how many minutes aheat should the algorithm fit to
-        offset is how much the fitted curve shifts down. this is in relative scale to the intial fitting point.
-        """
-        self.degree = degree
-        self.fitwindow=fitwindow
-        self.offset = offset
+# class LogCt(BaseEstimator,TransformerMixin):
+#     "calculate the Ct from threshold method,this should always come after findPeak"
+#     def __init__(self,degree=1,fitwindow=4,offset=0.05):
+#         """
+#         degree is the polyfit degree of fitting,
+#         fit on the log values of the curve
+#         fitwindow is how many minutes aheat should the algorithm fit to
+#         offset is how much the fitted curve shifts down. this is in relative scale to the intial fitting point.
+#         """
+#         self.degree = degree
+#         self.fitwindow=fitwindow
+#         self.offset = offset
                 
-    def fit(self,X,y=None):        
-        return self    
-    def transformer(self,X):
-        fitwindow = self.fitwindow
-        degree = self.degree
-        offset = self.offset
-        t,deri,smoothed_c = X[-3:]
-        left_ips,peak_prominence,peak_width = X[0:3]
-        _tofit = findTimeVal(t,smoothed_c,left_ips-fitwindow,fitwindow)
-        _tofitmin = len(_tofit) and _tofit.min()
-        delta = 0
-        if _tofitmin <= 0:
-            delta = -_tofitmin + 1e-9
-        tofit = np.log( _tofit + delta)
+#     def fit(self,X,y=None):        
+#         return self    
+#     def transformer(self,X):
+#         fitwindow = self.fitwindow
+#         degree = self.degree
+#         offset = self.offset
+#         t,deri,smoothed_c = X[-3:]
+#         left_ips,peak_prominence,peak_width = X[0:3]
+#         _tofit = findTimeVal(t,smoothed_c,left_ips-fitwindow,fitwindow)
+#         _tofitmin = len(_tofit) and _tofit.min()
+#         delta = 0
+#         if _tofitmin <= 0:
+#             delta = -_tofitmin + 1e-9
+#         tofit = np.log( _tofit + delta)
 
-        fitpara = np.polyfit(np.linspace(max(left_ips-fitwindow,t[0]),left_ips,len(tofit)),np.array(tofit,dtype=float),deg=degree)
+#         fitpara = np.polyfit(np.linspace(max(left_ips-fitwindow,t[0]),left_ips,len(tofit)),np.array(tofit,dtype=float),deg=degree)
         
-        thresholdpara = fitpara + np.array( [0]*degree +[np.log(1-offset)])
-        thresholdline = np.poly1d(thresholdpara) 
-        _tosearch = findTimeVal(t,smoothed_c,left_ips,t[-1])
-        _tosearchmin = len(_tosearch) and _tosearch.min()
-        delta = 0
-        if _tosearchmin <= 0:
-            delta = -_tosearchmin + 1e-9
-        tosearch = np.log(_tosearch + delta)
-        tosearchT = np.linspace(left_ips,t[-1],len(tosearch))
-        thresholdSearch = thresholdline(tosearchT) - tosearch
-        thresholdCt = left_ips
-        for sT,sthre in zip(tosearchT,thresholdSearch):        
-            if sthre > 0:
-                break
-            thresholdCt = sT
-        return  [*X[0:-3],*thresholdpara,left_ips]
+#         thresholdpara = fitpara + np.array( [0]*degree +[np.log(1-offset)])
+#         thresholdline = np.poly1d(thresholdpara) 
+#         _tosearch = findTimeVal(t,smoothed_c,left_ips,t[-1])
+#         _tosearchmin = len(_tosearch) and _tosearch.min()
+#         delta = 0
+#         if _tosearchmin <= 0:
+#             delta = -_tosearchmin + 1e-9
+#         tosearch = np.log(_tosearch + delta)
+#         tosearchT = np.linspace(left_ips,t[-1],len(tosearch))
+#         thresholdSearch = thresholdline(tosearchT) - tosearch
+#         thresholdCt = left_ips
+#         for sT,sthre in zip(tosearchT,thresholdSearch):        
+#             if sthre > 0:
+#                 break
+#             thresholdCt = sT
+#         return  [*X[0:-3],*thresholdpara,left_ips]
           
-    def transform(self,X,y=None):        
-        return np.array([self.transformer(i) for i in X])
+#     def transform(self,X,y=None):        
+#         return np.array([self.transformer(i) for i in X])
 
         
 class HyperCt(BaseEstimator,TransformerMixin):
@@ -415,23 +425,23 @@ class HyperCt(BaseEstimator,TransformerMixin):
 
     
         
-class LeftIpsCt(BaseEstimator,TransformerMixin):
-    """
-    use the leftips as ct for next step.
-    """
-    def fit(self,X,y=None):        
-        return self    
+# class LeftIpsCt(BaseEstimator,TransformerMixin):
+#     """
+#     use the leftips as ct for next step.
+#     """
+#     def fit(self,X,y=None):        
+#         return self    
     
-    def hyper(self,p,x,y):
-        return p[0]/(x+p[1]) +p[2] -y
-    def hyperF(self,p):
-        return lambda x:p[0]/(x+p[1]) +p[2]
+#     def hyper(self,p,x,y):
+#         return p[0]/(x+p[1]) +p[2] -y
+#     def hyperF(self,p):
+#         return lambda x:p[0]/(x+p[1]) +p[2]
 
-    def transformer(self,X):            
-        return  [*X[0:-3],X[0]]
+#     def transformer(self,X):            
+#         return  [*X[0:-3],X[0]]
           
-    def transform(self,X,y=None):        
-        return np.array([self.transformer(i) for i in X])
+#     def transform(self,X,y=None):        
+#         return np.array([self.transformer(i) for i in X])
 
     
             
@@ -468,26 +478,26 @@ class CtPredictor(BaseEstimator,TransformerMixin):
         
         
                 
-class SdPrPredictor(BaseEstimator,TransformerMixin):
-    "a predictor to predict result based on ct and prominence threshold from FindPeak"
-    def __init__(self,prominence=0.2,sd=0.106382 ):        
-        self.prominence = prominence
-        self.sd=sd
+# class SdPrPredictor(BaseEstimator,TransformerMixin):
+#     "a predictor to predict result based on ct and prominence threshold from FindPeak"
+#     def __init__(self,prominence=0.2,sd=0.106382 ):        
+#         self.prominence = prominence
+#         self.sd=sd
                 
-    def fit(self,X,y=None):        
-        return self    
+#     def fit(self,X,y=None):        
+#         return self    
         
-    def transformer(self,x):
-        """
-        return 0,1 flag, thresholdCt, prominence, signal drop at 5min
-        """
-        pr = x[1]
-        sd = x[5]
-        result = pr > self.prominence and sd > self.sd
-        return int(result),x[-1],x[1],x[5]
+#     def transformer(self,x):
+#         """
+#         return 0,1 flag, thresholdCt, prominence, signal drop at 5min
+#         """
+#         pr = x[1]
+#         sd = x[5]
+#         result = pr > self.prominence and sd > self.sd
+#         return int(result),x[-1],x[1],x[5]
         
-    def transform(self,X,y=None):        
-        return np.apply_along_axis(self.transformer,1,X)
+#     def transform(self,X,y=None):        
+#         return np.apply_along_axis(self.transformer,1,X)
         
 class Normalize(BaseEstimator,TransformerMixin):
     """
