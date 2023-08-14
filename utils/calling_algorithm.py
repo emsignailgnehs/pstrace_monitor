@@ -379,8 +379,15 @@ class HyperCt(BaseEstimator,TransformerMixin):
 
     def transformer(self,X):        
         offset = self.offset
-        t,deri,smoothed_c = X[-3:]
-        left_ips,peak_prominence,peak_width = X[0:3]
+        t,deri,smoothed_c = X['X']
+        left_ips = X['left_ips']
+        peak_prominence = X['peak_prominence']
+        peak_width = X['peak_width']
+        sdAtRightIps = X['sdAtRightIps']
+        sdAt5min = X['sdAt5min']
+        sdAt10min = X['sdAt10min']
+        sdAtEnd = X['sdAtEnd']
+        # left_ips,peak_prominence,peak_width = X[0:3]
         tofit = findTimeVal(t,smoothed_c,t[0],left_ips - t[0])
         
         try:
@@ -404,7 +411,7 @@ class HyperCt(BaseEstimator,TransformerMixin):
                 break
             thresholdCt = sT
 
-        left_ips,peak_prominence,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd = X[0:-3]
+        # left_ips,peak_prominence,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd = X[0:-3]
         
         return [
             {
