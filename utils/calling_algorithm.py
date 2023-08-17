@@ -387,6 +387,7 @@ class HyperCt(BaseEstimator,TransformerMixin):
         sdAt5min = X['sdAt5min']
         sdAt10min = X['sdAt10min']
         sdAtEnd = X['sdAtEnd']
+        
         # left_ips,peak_prominence,peak_width = X[0:3]
         tofit = findTimeVal(t,smoothed_c,t[0],left_ips - t[0])
         
@@ -559,7 +560,8 @@ class Truncate(BaseEstimator,TransformerMixin):
         # i have to do this float conversion, otherwise I got dtype inexact problem in polyfit.
         newcurrent = extract_timepionts(np.array([float(i) for i in t]), 
                                         np.array([float(i) for i in pc]),self.cutoffStart,self.cutoffEnd,self.n)        
-        return np.linspace(self.cutoffStart,self.cutoffEnd,int(c)),newcurrent
+        # return np.linspace(self.cutoffStart,self.cutoffEnd,int(c)),newcurrent
+        return np.linspace(self.cutoffStart,self.cutoffEnd,self.n),newcurrent
     def transform(self,X,y=None):
         return np.array([self.transformer(i) for i in X],dtype='object')
 
