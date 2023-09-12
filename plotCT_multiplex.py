@@ -84,7 +84,7 @@ for picklefile in pickleFiles:
     """Group the data into channels for channel specific calling
     """
     channel_data = {}
-    ch_pattern = r'\-(C\d)'
+    ch_pattern = r'\-(C\d)$'
     for name, datum, user_mark, device in zip(names, X, user_marks, devices):
         ch = re.findall(ch_pattern, name)[0]
         if ch not in channel_data.keys():
