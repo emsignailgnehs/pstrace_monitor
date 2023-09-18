@@ -381,12 +381,12 @@ class HyperCt(BaseEstimator,TransformerMixin):
         offset = self.offset
         t,deri,smoothed_c = X['X']
         left_ips = X['left_ips']
-        peak_prominence = X['peak_prominence']
-        peak_width = X['peak_width']
-        sdAtRightIps = X['sdAtRightIps']
-        sdAt5min = X['sdAt5min']
-        sdAt10min = X['sdAt10min']
-        sdAtEnd = X['sdAtEnd']
+        # peak_prominence = X['peak_prominence']
+        # peak_width = X['peak_width']
+        # sdAtRightIps = X['sdAtRightIps']
+        # sdAt5min = X['sdAt5min']
+        # sdAt10min = X['sdAt10min']
+        # sdAtEnd = X['sdAtEnd']
         
         # left_ips,peak_prominence,peak_width = X[0:3]
         tofit = findTimeVal(t,smoothed_c,t[0],left_ips - t[0])
@@ -415,15 +415,16 @@ class HyperCt(BaseEstimator,TransformerMixin):
         # left_ips,peak_prominence,peak_width,sdAtRightIps,sdAt5min,sdAt10min,sdAtEnd = X[0:-3]
         
         return [
-            {
-                'left_ips':left_ips,
-                'peak_prominence':peak_prominence,
-                'peak_width':peak_width,
-                'sdAtRightIps':sdAtRightIps,
-                'sdAt5min':sdAt5min,
-                'sdAt10min':sdAt10min,
-                'sdAtEnd':sdAtEnd,
-            },
+            # {
+            #     'left_ips':left_ips,
+            #     'peak_prominence':peak_prominence,
+            #     'peak_width':peak_width,
+            #     'sdAtRightIps':sdAtRightIps,
+            #     'sdAt5min':sdAt5min,
+            #     'sdAt10min':sdAt10min,
+            #     'sdAtEnd':sdAtEnd,
+            # },
+            X,
             *thresholdpara,
             left_ips
         ]
@@ -467,19 +468,28 @@ class CtPredictor(BaseEstimator,TransformerMixin):
         """
         return 0,1 flag, thresholdCt, prominence, signal drop at 5min
         """
+        sd_duration = 7
         calc_result = x[0]
+
         calc_ct = calc_result['left_ips']
         calc_prominence = calc_result['peak_prominence']
-        calc_sdAt5min = calc_result['sdAt5min']
-        calc_sdAt10min = calc_result['sdAt10min']
-        calc_sdAtEnd = calc_result['sdAtEnd']
-        return {
-            'prediction': int(calc_ct<=self.ct and calc_prominence>=self.prominence and calc_sdAt10min>=self.sd),
-            'ct': calc_ct,
-            'sdAt5min': calc_sdAt5min,
-            'sdAt10min': calc_sdAt10min,
-            'sdAtEnd': calc_sdAtEnd
-        }
+        calc_sd = calc_result[f'sdAt{sd_duration}min']
+        
+        calc_result['prediction'] = int(calc_ct<=self.ct and calc_prominence>=self.prominence and calc_sd>=self.sd)
+        calc_result['ct'] = calc_ct
+        calc_result['sd'] = calc_sd
+        calc_result['sd_duration'] = sd_duration
+        # calc_sdAt5min = calc_result['sdAt5min']
+        # calc_sdAt10min = calc_result['sdAt10min']
+        # calc_sdAtEnd = calc_result['sdAtEnd']
+        # return {
+        #     'prediction': int(calc_ct<=self.ct and calc_prominence>=self.prominence and calc_sd>=self.sd),
+        #     'ct': calc_ct,
+        #     'sdAt5min': calc_sdAt5min,
+        #     'sdAt10min': calc_sdAt10min,
+        #     'sdAtEnd': calc_sdAtEnd
+        # }
+        return calc_result
         
     def transform(self,X,y=None):        
         return np.apply_along_axis(self.transformer,1,X)
