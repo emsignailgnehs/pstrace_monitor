@@ -248,7 +248,7 @@ for picklefile in pickleFiles:
                     name, 
                     'Positive' if user_mark else 'Negative', 
                     'Positive' if prediction else 'Negative',
-                    device,
+                    f"\'{device}\'",
                     ct,
                     pr,
                     sd,
