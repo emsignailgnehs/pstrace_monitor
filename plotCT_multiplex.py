@@ -84,7 +84,7 @@ for picklefile in pickleFiles:
     """Group the data into channels for channel specific calling
     """
     channel_data = {}
-    ch_pattern = r'\-(C\d)$'
+    ch_pattern = r'\-(C\d)\_*[a-z0-9]*$'
     for name, datum, user_mark, device in zip(names, X, user_marks, devices):
         ch = re.findall(ch_pattern, name)[0]
         if ch not in channel_data.keys():
@@ -289,74 +289,74 @@ for picklefile in pickleFiles:
         return t[range_flag], val[range_flag]
 
     #%%
-    # for ch in channel_data.keys():
-    #     """Set up the data structure for plotting
-    #     """
-    #     data = channel_data[ch]
-    #     rs = data['rawdata']
-    #     ss = data['smooth']
-    #     ds = [
-    #         [
-    #             np.linspace(d[0][0], d[0][-1], len(d[1])),
-    #             d[1]
-    #         ]
-    #         for d in data['deri']
-    #     ]
-    #     hCt = data['hCt']
-    #     hCtpred = data['hCtpred']
-    #     names = data['name']
-    #     user_marks = data['user_mark']
-    #     """Set up the outer grid to arrage the plotted reuslts
-    #     """
-    #     col = 4
-    #     row = int(np.ceil(len(rs) / col))
-    #     # set resolution for the plot
-    #     plt.rcParams['figure.dpi'] = 150
-    #     # create a gridspec for plots
-    #     fig = plt.figure(figsize=(col*6, row*8))
-    #     outer_gs = gridspec.GridSpec(row, col, wspace=0.2, hspace=0.2)
-    #     fig.suptitle(
-    #         f"""{ch}: {ch_config[ch]['target']}  =>  CT={ch_config[ch]['CT']}, SD={ch_config[ch]['SD']}""",
-    #         fontsize=25,
-    #         fontweight='bold',
-    #         y=0.95
-    #     )
+    for ch in channel_data.keys():
+        """Set up the data structure for plotting
+        """
+        data = channel_data[ch]
+        rs = data['rawdata']
+        ss = data['smooth']
+        ds = [
+            [
+                np.linspace(d[0][0], d[0][-1], len(d[1])),
+                d[1]
+            ]
+            for d in data['deri']
+        ]
+        hCt = data['hCt']
+        hCtpred = data['hCtpred']
+        names = data['name']
+        user_marks = data['user_mark']
+        """Set up the outer grid to arrage the plotted reuslts
+        """
+        col = 4
+        row = int(np.ceil(len(rs) / col))
+        # set resolution for the plot
+        plt.rcParams['figure.dpi'] = 150
+        # create a gridspec for plots
+        fig = plt.figure(figsize=(col*6, row*8))
+        outer_gs = gridspec.GridSpec(row, col, wspace=0.2, hspace=0.2)
+        fig.suptitle(
+            f"""{ch}: {ch_config[ch]['target']}  =>  CT={ch_config[ch]['CT']}, SD={ch_config[ch]['SD']}""",
+            fontsize=25,
+            fontweight='bold',
+            y=0.95
+        )
 
-    #     for i,(r,s,d,name,user_mark, calc, pred) in enumerate(zip(rs,ss,ds,names,user_marks, hCt, hCtpred)):
-    #         normStartIndex, normEndIndex = find_norm_range(s, normStart, normEnd)
-    #         left_ips = calc[0]['left_ips']
-    #         peak_width = calc[0]['peak_width']
-    #         curvePeakRange = findTimeVal(s[0], s[1], left_ips, 10, lower_bound=cutoffStart, upper_bound= cutoffEnd)
+        for i,(r,s,d,name,user_mark, calc, pred) in enumerate(zip(rs,ss,ds,names,user_marks, hCt, hCtpred)):
+            normStartIndex, normEndIndex = find_norm_range(s, normStart, normEnd)
+            left_ips = calc[0]['left_ips']
+            peak_width = calc[0]['peak_width']
+            curvePeakRange = findTimeVal(s[0], s[1], left_ips, 10, lower_bound=cutoffStart, upper_bound= cutoffEnd)
 
-    #         inner_gs = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outer_gs[i], wspace=0.1, hspace=0.1)
-    #         ax1 = plt.Subplot(fig, inner_gs[0])
-    #         ax2 = plt.Subplot(fig, inner_gs[1])
-    #         # fig, (ax1, ax2) = plt.subplots(2,1, sharex=True, figsize=(6,8))
-    #         ax1.plot(r[0],r[1],label=f'{ch} raw', color= 'black', linewidth=2)
-    #         ax2.plot(s[0],s[1],label='smoothed', color= 'red' if user_mark else 'green', linewidth=2)
-    #         ax2.plot(d[0],normalize_to_refdata(d[1], s[1]),label='deri', color= 'orange', linewidth=2, linestyle='--')
-    #         if normEndIndex - normStartIndex <=1:
-    #             ax2.scatter(s[0][normStartIndex:normEndIndex],s[1][normStartIndex:normEndIndex],label='norm point', color= 'cyan')
-    #         else:
-    #             ax2.plot(s[0][normStartIndex:normEndIndex],s[1][normStartIndex:normEndIndex],label='norm range', color= 'cyan', linewidth=2, linestyle='-')
-    #         ax2.plot(
-    #             curvePeakRange[0], curvePeakRange[1]
-    #             , color= 'blue',linewidth=8,alpha=0.2, label='SD range'
-    #         )
-    #         ax2.axvline(x= cutoffStart, color='black', linestyle='--', linewidth=0.5)
-    #         ax2.axvline(x= cutoffEnd, color='black', linestyle='--', linewidth=0.5)
-    #         ax1.set_title(name, fontweight= 'bold')
-    #         ax2.set_xlabel(f'{"PASSED" if user_mark == pred["prediction"] else "FAILED"} (User mark: {user_mark}; Predicted: {pred["prediction"]})\nCT={pred["ct"]:.3f}; SD 10={pred["sdAt10min"]:.3f}',
-    #                     fontweight= 'bold',
-    #                     color= 'blue' if user_mark == pred['prediction'] else 'red'
-    #                     )
-    #         ax1.legend(title = '<Raw Data>')
-    #         ax2.legend(title = '<Processed>')
-    #         fig.add_subplot(ax1)
-    #         fig.add_subplot(ax2)
-    #     plt.tight_layout()
-    #     fig.savefig(output_ch_figure_names[ch])
-    #     logger.info(f'Output figure for {ch} finished')
+            inner_gs = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outer_gs[i], wspace=0.1, hspace=0.1)
+            ax1 = plt.Subplot(fig, inner_gs[0])
+            ax2 = plt.Subplot(fig, inner_gs[1])
+            # fig, (ax1, ax2) = plt.subplots(2,1, sharex=True, figsize=(6,8))
+            ax1.plot(r[0],r[1],label=f'{ch} raw', color= 'black', linewidth=2)
+            ax2.plot(s[0],s[1],label='smoothed', color= 'red' if user_mark else 'green', linewidth=2)
+            ax2.plot(d[0],normalize_to_refdata(d[1], s[1]),label='deri', color= 'orange', linewidth=2, linestyle='--')
+            if normEndIndex - normStartIndex <=1:
+                ax2.scatter(s[0][normStartIndex:normEndIndex],s[1][normStartIndex:normEndIndex],label='norm point', color= 'cyan')
+            else:
+                ax2.plot(s[0][normStartIndex:normEndIndex],s[1][normStartIndex:normEndIndex],label='norm range', color= 'cyan', linewidth=2, linestyle='-')
+            ax2.plot(
+                curvePeakRange[0], curvePeakRange[1]
+                , color= 'blue',linewidth=8,alpha=0.2, label='SD range'
+            )
+            ax2.axvline(x= cutoffStart, color='black', linestyle='--', linewidth=0.5)
+            ax2.axvline(x= cutoffEnd, color='black', linestyle='--', linewidth=0.5)
+            ax1.set_title(name, fontweight= 'bold')
+            ax2.set_xlabel(f'{"PASSED" if user_mark == pred["prediction"] else "FAILED"} (User mark: {user_mark}; Predicted: {pred["prediction"]})\nCT={pred["ct"]:.3f}; SD 10={pred["sdAt10min"]:.3f}',
+                        fontweight= 'bold',
+                        color= 'blue' if user_mark == pred['prediction'] else 'red'
+                        )
+            ax1.legend(title = '<Raw Data>')
+            ax2.legend(title = '<Processed>')
+            fig.add_subplot(ax1)
+            fig.add_subplot(ax2)
+        plt.tight_layout()
+        fig.savefig(output_ch_figure_names[ch])
+        logger.info(f'Output figure for {ch} finished')
     #%%
     """
     output findpeak results from each channel as a json file
